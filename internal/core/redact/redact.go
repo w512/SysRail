@@ -24,7 +24,8 @@ var (
 	// KEY=value, KEY: value, "key": "value" where the key looks sensitive.
 	keyValue = regexp.MustCompile(`(?i)("?[A-Za-z0-9_.-]*(?:` + keyWords + `)[A-Za-z0-9_.-]*"?)(\s*[=:]\s*)("[^"]*"|'[^']*'|[^\s,;&"']+)`)
 	tokens   = regexp.MustCompile(`\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|` +
-		`xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,})`)
+		`xox[abprs]-[A-Za-z0-9-]{10,}|sk-[A-Za-z0-9_-]{20,}|AIza[0-9A-Za-z_-]{35}|glpat-[A-Za-z0-9_-]{20,}|` +
+		`sysrail_[A-Za-z0-9_-]{40,})`)
 )
 
 // IsSensitiveKey reports whether a field name suggests a secret value.

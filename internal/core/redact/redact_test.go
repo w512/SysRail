@@ -22,6 +22,7 @@ func TestString(t *testing.T) {
 		{"-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA\n-----END RSA PRIVATE KEY-----", "MIIEpAIBAAKCAQEA"},
 		{"truncated -----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXk", "b3BlbnNzaC1rZXk"},
 		{"client_secret=xyz789&grant=1", "xyz789"},
+		{"using sysrail_AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdEfG", "AbCdEfGhIjKlMnOpQrStUvWxYz0123456789-_AbCdEfG"},
 	}
 	for _, tt := range tests {
 		got := String(tt.in)
