@@ -17,6 +17,11 @@ type command struct {
 
 func commands() []command {
 	return []command{
+		{"serve", "run the daemon", runServe},
+		{"approvals", "list, show, approve or deny pending requests", runApprovals},
+		{"audit", "show the audit log", runAudit},
+		{"token", "create an agent token", runToken},
+		{"policy", "validate the policy and show effective grants", runPolicy},
 		{"version", "print version", runVersion},
 	}
 }
