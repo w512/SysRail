@@ -1,0 +1,10 @@
+processor	: 0
+vendor_id	: AuthenticAMD
+model name	: AMD Ryzen 7 7700 8-Core Processor
+cpu MHz		: 5086.530
+
+processor	: 1
+vendor_id	: AuthenticAMD
+model name	: AMD Ryzen 7 7700 8-Core Processor
+cpu MHz		: 3000.000
+
