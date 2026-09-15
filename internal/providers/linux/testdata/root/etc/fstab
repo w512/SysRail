@@ -1,0 +1,6 @@
+# /etc/fstab
+/dev/disk/by-uuid/b3d99260-bfd6-44f2-8ba2-519d7cac2d9b / ext4 defaults 0 1
+/dev/disk/by-uuid/8547-D766 /boot/efi vfat defaults 0 1
+/swap.img	none	swap	sw	0	0
+UUID=1111-2222 /mnt/backup ext4 defaults,nofail 0 2
+UUID=3333-4444 /mnt/usb ext4 noauto 0 0

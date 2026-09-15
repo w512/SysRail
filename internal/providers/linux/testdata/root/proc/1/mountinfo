@@ -1,0 +1,10 @@
+27 33 0:24 / /sys rw,nosuid,nodev,noexec,relatime shared:7 - sysfs sysfs rw
+28 33 0:25 / /proc rw,nosuid,nodev,noexec,relatime shared:13 - proc proc rw
+31 33 0:27 / /run rw,nosuid,nodev,noexec,relatime shared:5 - tmpfs tmpfs rw,size=13103100k,mode=755,inode64
+33 2 259:2 / / rw,relatime shared:1 - ext4 /dev/nvme0n1p2 rw
+37 27 0:31 / /sys/fs/cgroup rw,nosuid,nodev,noexec,relatime shared:9 - cgroup2 cgroup2 rw,nsdelegate
+47 33 7:0 / /snap/bare/5 ro,nodev,relatime shared:21 - squashfs /dev/loop0 ro,errors=continue,threads=single
+96 33 259:1 / /boot/efi rw,relatime shared:111 - vfat /dev/nvme0n1p1 rw,fmask=0022,dmask=0022
+100 33 8:1 / /srv/media\040library rw,relatime shared:120 - xfs /dev/sda1 rw
+101 33 8:1 / /mnt/media-bind rw,relatime shared:120 - xfs /dev/sda1 rw
+102 33 0:80 / /mnt/nas ro,relatime shared:130 - nfs4 nas:/export ro,vers=4.2

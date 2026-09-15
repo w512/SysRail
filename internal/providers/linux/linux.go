@@ -88,6 +88,17 @@ func (p *Provider) Capabilities() []core.Capability {
 			Description: "Get RAM and swap usage in bytes.",
 			Risk:        core.RiskRead, Permission: "system.read",
 		}, nil, func(ctx context.Context, _ noArgs) (any, error) { return p.memoryStatus() }),
+		core.Define(core.Capability{
+			ID: "storage.status", Tool: "storage_get_status",
+			Description: "Get capacity, usage and inode usage for every real filesystem, flagging ones above " +
+				"90% (warning) or 95% (critical).",
+			Risk: core.RiskRead, Permission: "storage.read",
+		}, nil, func(ctx context.Context, _ noArgs) (any, error) { return p.storageStatus() }),
+		core.Define(core.Capability{
+			ID: "storage.mounts", Tool: "storage_list_mounts",
+			Description: "List mounted filesystems and /etc/fstab entries that are expected but not mounted.",
+			Risk:        core.RiskRead, Permission: "storage.read",
+		}, nil, func(ctx context.Context, in mountsArgs) (any, error) { return p.listMounts(in) }),
 	}
 }
 
