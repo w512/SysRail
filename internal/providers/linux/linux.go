@@ -105,6 +105,11 @@ func (p *Provider) Capabilities() []core.Capability {
 			Description: "List mounted filesystems and /etc/fstab entries that are expected but not mounted.",
 			Risk:        core.RiskRead, Permission: "storage.read",
 		}, nil, func(ctx context.Context, in mountsArgs) (any, error) { return p.listMounts(in) }),
+		core.Define(core.Capability{
+			ID: "network.connections", Tool: "network_get_connections",
+			Description: "List TCP/UDP sockets: listening ports by default, or established connections.",
+			Risk:        core.RiskRead, Permission: "network.read", InputSchema: connSchema(),
+		}, validateConnArgs, func(ctx context.Context, in connArgs) (any, error) { return p.connections(in) }),
 	}
 }
 
