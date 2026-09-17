@@ -3,6 +3,7 @@ package linux
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -17,6 +18,9 @@ func testProvider(t *testing.T, opts Options) *Provider {
 	}
 	if opts.CPUSample == 0 {
 		opts.CPUSample = time.Millisecond
+	}
+	if opts.LookPath == nil {
+		opts.LookPath = func(string) (string, error) { return "", errors.New("not found") }
 	}
 	return New(opts)
 }
@@ -116,6 +120,9 @@ func TestMemoryStatus(t *testing.T) {
 func TestMissingProcIsProviderUnavailable(t *testing.T) {
 	p := testProvider(t, Options{Root: os.DirFS(t.TempDir())})
 	for _, c := range p.Capabilities() {
+		if c.ID == "system.gpu" {
+			continue // no GPU is a valid answer, not an error
+		}
 		inv, err := c.Bind(nil)
 		if err != nil {
 			t.Fatal(err)

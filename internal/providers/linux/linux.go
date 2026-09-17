@@ -89,6 +89,12 @@ func (p *Provider) Capabilities() []core.Capability {
 			Risk:        core.RiskRead, Permission: "system.read",
 		}, nil, func(ctx context.Context, _ noArgs) (any, error) { return p.memoryStatus() }),
 		core.Define(core.Capability{
+			ID: "system.gpu", Tool: "system_get_gpu_status",
+			Description: "List GPUs with memory, utilization, temperature and power where available " +
+				"(NVIDIA via nvidia-smi, others via sysfs). available=false means no GPU was found.",
+			Risk: core.RiskRead, Permission: "system.read",
+		}, nil, func(ctx context.Context, _ noArgs) (any, error) { return p.gpuStatus(ctx) }),
+		core.Define(core.Capability{
 			ID: "storage.status", Tool: "storage_get_status",
 			Description: "Get capacity, usage and inode usage for every real filesystem, flagging ones above " +
 				"90% (warning) or 95% (critical).",

@@ -1,0 +1,2 @@
+DRIVER=nvidia
+PCI_ID=10DE:2803
