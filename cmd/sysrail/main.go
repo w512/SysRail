@@ -18,6 +18,7 @@ type command struct {
 func commands() []command {
 	return []command{
 		{"serve", "run the daemon", runServe},
+		{"mcp", "serve MCP over stdio for an agent (proxies to the daemon)", runMCP},
 		{"approvals", "list, show, approve or deny pending requests", runApprovals},
 		{"audit", "show the audit log", runAudit},
 		{"token", "create an agent token", runToken},
