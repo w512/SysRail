@@ -78,6 +78,18 @@ func TestValidation(t *testing.T) {
 	}
 }
 
+func TestRelativeConfigPathYieldsAbsolutePaths(t *testing.T) {
+	path := write(t, "database: sysrail.db\n")
+	t.Chdir(filepath.Dir(path))
+	cfg, err := Load("config.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(cfg.Database) {
+		t.Fatalf("database path %q is relative", cfg.Database)
+	}
+}
+
 func TestRemoteBindCanBeAllowed(t *testing.T) {
 	if _, err := Load(write(t, "server:\n  http_listen: 0.0.0.0:9487\n  allow_remote: true\n")); err != nil {
 		t.Fatal(err)

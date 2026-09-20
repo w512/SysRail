@@ -124,7 +124,11 @@ func Load(path string) (*Config, error) {
 	if err := dec.Decode(cfg); err != nil {
 		return nil, fmt.Errorf("parse config %s: %w", path, err)
 	}
-	base := filepath.Dir(path)
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return nil, fmt.Errorf("resolve config path: %w", err)
+	}
+	base := filepath.Dir(abs)
 	for _, p := range []*string{&cfg.Database, &cfg.PolicyFile, &cfg.Server.AgentSocket, &cfg.Server.AdminSocket} {
 		if *p != "" && !filepath.IsAbs(*p) {
 			*p = filepath.Join(base, *p)
