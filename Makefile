@@ -4,8 +4,9 @@ VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo 
 LDFLAGS     := -s -w -X $(MODULE)/internal/version.Version=$(VERSION)
 LINUX_ENV   := CGO_ENABLED=0 GOOS=linux GOARCH=amd64
 
-STATICCHECK := honnef.co/go/tools/cmd/staticcheck@v0.8.1
-GOVULNCHECK := golang.org/x/vuln/cmd/govulncheck@v1.8.0
+TOOLS       := $(CURDIR)/build/tools
+STATICCHECK := $(TOOLS)/staticcheck
+GOVULNCHECK := $(TOOLS)/govulncheck
 
 .PHONY: all build build-linux test vet fmt-check staticcheck vulncheck check test-remote clean
 
@@ -22,17 +23,24 @@ test:
 
 vet:
 	$(GO) vet ./...
-	$(LINUX_ENV) $(GO) vet ./...
+	$(LINUX_ENV) $(GO) vet -tags integration ./...
 
 fmt-check:
 	@out=$$(gofmt -l .); if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 
-staticcheck:
-	$(GO) run $(STATICCHECK) ./...
-	$(LINUX_ENV) $(GO) run $(STATICCHECK) ./...
+$(STATICCHECK):
+	GOBIN=$(TOOLS) $(GO) install honnef.co/go/tools/cmd/staticcheck@v0.8.1
 
-vulncheck:
-	$(GO) run $(GOVULNCHECK) ./...
+$(GOVULNCHECK):
+	GOBIN=$(TOOLS) $(GO) install golang.org/x/vuln/cmd/govulncheck@v1.8.0
+
+# Tools are built for the host; GOOS only selects which files are analyzed.
+staticcheck: $(STATICCHECK)
+	$(STATICCHECK) ./...
+	$(LINUX_ENV) $(STATICCHECK) -tags integration ./...
+
+vulncheck: $(GOVULNCHECK)
+	$(GOVULNCHECK) ./...
 
 check: fmt-check vet staticcheck test
 
