@@ -2,6 +2,8 @@ module github.com/w512/SysRail
 
 go 1.26.3
 
+toolchain go1.26.6
+
 require github.com/google/jsonschema-go v0.4.3
 
 require (
