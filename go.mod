@@ -7,6 +7,8 @@ toolchain go1.26.6
 require github.com/google/jsonschema-go v0.4.3
 
 require (
+	github.com/coreos/go-systemd/v22 v22.7.0
+	github.com/godbus/dbus/v5 v5.2.2
 	github.com/modelcontextprotocol/go-sdk v1.8.0
 	go.yaml.in/yaml/v3 v3.0.5
 	modernc.org/sqlite v1.60.1
