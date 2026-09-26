@@ -85,6 +85,9 @@ func (p *Provider) Capabilities() []core.Capability {
 			if in.Name == "" || strings.HasPrefix(in.Name, "-") {
 				return "", fmt.Errorf("invalid widget name %q", in.Name)
 			}
+			if in.Name == "protected" {
+				return "", core.Errorf(core.CodePermissionDenied, "widget %q is protected", in.Name)
+			}
 			return in.Name, nil
 		}, func(_ context.Context, in widgetArgs) (any, error) {
 			if in.Name == "missing" {

@@ -131,7 +131,13 @@ func (e *Engine) Execute(ctx context.Context, call Call) (*Outcome, error) {
 	}
 	inv, err := c.Bind(call.Args)
 	if err != nil {
-		return reject(audit.ResultInvalid, core.AsError(err))
+		cerr := core.AsError(err)
+		result := audit.ResultInvalid
+		if cerr.Code == core.CodePermissionDenied {
+			// Providers refuse some resources outright (e.g. protected units).
+			result = audit.ResultDenied
+		}
+		return reject(result, cerr)
 	}
 	hash := argsHash(c.ID, inv.Args)
 	rec.Resource, rec.ArgumentsHash, rec.Arguments = inv.Resource, hash, redact.JSON(inv.Args)

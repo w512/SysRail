@@ -183,6 +183,15 @@ func TestRejectionsAreAudited(t *testing.T) {
 	}
 }
 
+func TestProviderRefusalIsAuditedAsDenied(t *testing.T) {
+	h := newHarness(t)
+	_, err := h.exec(t, Call{Capability: "fake.restart", Args: json.RawMessage(`{"name":"protected"}`)})
+	wantCode(t, err, core.CodePermissionDenied)
+	if recs := h.audit(t); recs[0].Result != audit.ResultDenied {
+		t.Fatalf("audit result %q, want denied", recs[0].Result)
+	}
+}
+
 func TestProviderErrors(t *testing.T) {
 	h := newHarness(t)
 	_, err := h.exec(t, Call{Capability: "fake.slow", Args: json.RawMessage(`{"millis":2000}`)})
