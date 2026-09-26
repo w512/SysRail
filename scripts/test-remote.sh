@@ -29,7 +29,7 @@ rm -rf "$OUT"
 mkdir -p "$OUT"
 
 built=()
-for pkg in $(go list -tags "$TAGS" $PKGS); do
+for pkg in $(GOOS=linux GOARCH=amd64 go list -tags "$TAGS" $PKGS); do
 	rel="${pkg#"$MODULE"}"
 	rel="${rel#/}"
 	[ -z "$rel" ] && rel="."
