@@ -1,0 +1,11 @@
+# Test-host policy. Only sysrail-test-* units may ever be changed.
+version: 1
+agents:
+  e2e:
+    allow: [system.read, storage.read, network.read, service.read, logs.read]
+    deny: [service.stop]
+    resources:
+      service:
+        "sysrail-test-*.service": { start: ask, restart: ask }
+  e2e-readonly:
+    allow: [system.read, service.read]

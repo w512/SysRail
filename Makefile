@@ -8,7 +8,7 @@ TOOLS       := $(CURDIR)/build/tools
 STATICCHECK := $(TOOLS)/staticcheck
 GOVULNCHECK := $(TOOLS)/govulncheck
 
-.PHONY: all build build-linux test vet fmt-check staticcheck vulncheck check test-remote clean
+.PHONY: all build build-linux test vet fmt-check staticcheck vulncheck check test-remote deploy-remote undeploy-remote e2e-remote clean
 
 all: check build
 
@@ -48,6 +48,19 @@ check: fmt-check vet staticcheck test
 # Linux test host. See scripts/test-remote.sh for knobs.
 test-remote:
 	./scripts/test-remote.sh
+
+# Installs the current build plus the deploy/test overlay on the test host.
+deploy-remote:
+	./scripts/deploy-remote.sh
+
+# Removes everything deploy-remote installed.
+undeploy-remote:
+	./scripts/undeploy-remote.sh
+
+# Full end-to-end run against a freshly deployed daemon, then cleanup.
+e2e-remote:
+	./scripts/deploy-remote.sh
+	TAGS=e2e PKGS=./test/e2e ./scripts/test-remote.sh; status=$$?; ./scripts/undeploy-remote.sh; exit $$status
 
 clean:
 	rm -rf build

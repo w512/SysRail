@@ -1,0 +1,12 @@
+// Test-host polkit rule: the sysrail user may only manage sysrail-test-* units.
+polkit.addRule(function(action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units" || subject.user !== "sysrail") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var verb = action.lookup("verb");
+    var unit = action.lookup("unit");
+    if (["start", "stop", "restart"].indexOf(verb) >= 0 && /^sysrail-test-.*\.service$/.test(unit)) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NO;
+});

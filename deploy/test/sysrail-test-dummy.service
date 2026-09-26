@@ -1,0 +1,7 @@
+[Unit]
+Description=SysRail end-to-end test dummy
+
+[Service]
+Type=simple
+# The fake credential lets the end-to-end test verify log redaction.
+ExecStart=/bin/sh -c 'echo "dummy starting with db_password=hunter22"; exec sleep infinity'

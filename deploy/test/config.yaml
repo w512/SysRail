@@ -1,0 +1,18 @@
+# Test-host configuration installed by scripts/deploy-remote.sh.
+# Token hashes are substituted at deploy time.
+server:
+  http_listen: 127.0.0.1:9487
+  agent_socket: /run/sysrail/agent.sock
+  agent_socket_group: sysrail-agents
+  admin_socket: /run/sysrail/admin.sock
+database: /var/lib/sysrail/sysrail.db
+policy_file: /etc/sysrail/policy.yaml
+approvals:
+  ttl: 5m
+agents:
+  e2e:
+    token_sha256: "@E2E_HASH@"
+  e2e-readonly:
+    token_sha256: "@E2E_READONLY_HASH@"
+log:
+  level: debug
