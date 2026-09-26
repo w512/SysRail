@@ -1,0 +1,53 @@
+[Unit]
+Description=SysRail permissioned control plane for AI agents
+Documentation=https://github.com/w512/SysRail
+After=network.target dbus.service
+
+[Service]
+Type=simple
+User=sysrail
+Group=sysrail
+# systemd-journal: read service logs. sysrail-agents: own the agent socket.
+SupplementaryGroups=systemd-journal sysrail-agents
+ExecStart=/usr/local/bin/sysrail serve --config /etc/sysrail/config.yaml
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=on-failure
+RestartSec=2s
+
+StateDirectory=sysrail
+StateDirectoryMode=0700
+RuntimeDirectory=sysrail
+RuntimeDirectoryMode=0755
+UMask=0077
+
+# Sandboxing. Privileged operations go through systemd over D-Bus and are
+# authorized by polkit; the daemon itself holds no capabilities.
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+# read-only (not "yes") so storage_get_status can statfs /home mounts.
+ProtectHome=read-only
+PrivateTmp=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged
+# Re-allow chown: the daemon sets the agent socket's group (no capability needed).
+SystemCallFilter=@chown
+SystemCallErrorNumber=EPERM
+# No PrivateDevices: nvidia-smi needs /dev/nvidia* for system_get_gpu_status.
+
+[Install]
+WantedBy=multi-user.target

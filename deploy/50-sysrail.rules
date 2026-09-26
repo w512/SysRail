@@ -1,0 +1,25 @@
+// polkit rule for SysRail (/etc/polkit-1/rules.d/50-sysrail.rules).
+//
+// Lets the sysrail daemon user start, stop and restart the services listed
+// in `allowed`, and nothing else. SysRail's own policy decides what each
+// agent may do; this rule is a second boundary enforced by the OS, so keep
+// it as narrow as your policy.
+polkit.addRule(function(action, subject) {
+    if (action.id !== "org.freedesktop.systemd1.manage-units" || subject.user !== "sysrail") {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var allowed = [
+        // /^nginx\.service$/,
+    ];
+    var verb = action.lookup("verb");
+    var unit = action.lookup("unit");
+    if (["start", "stop", "restart"].indexOf(verb) < 0 || unit === "sysrail.service") {
+        return polkit.Result.NO;
+    }
+    for (var i = 0; i < allowed.length; i++) {
+        if (allowed[i].test(unit)) {
+            return polkit.Result.YES;
+        }
+    }
+    return polkit.Result.NO;
+});

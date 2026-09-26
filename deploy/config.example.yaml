@@ -1,0 +1,48 @@
+# SysRail daemon configuration (/etc/sysrail/config.yaml).
+# Relative paths are resolved against this file's directory.
+
+server:
+  # HTTP API for agents. Loopback only unless allow_remote is true.
+  http_listen: 127.0.0.1:9487
+  allow_remote: false
+  # Unix socket for agents (used by `sysrail mcp`). Members of the group
+  # below may connect; they still need a valid agent token.
+  agent_socket: /run/sysrail/agent.sock
+  agent_socket_group: sysrail-agents
+  # Admin socket (mode 0600) for `sysrail approvals` and `sysrail audit`.
+  # Only root and the sysrail user can use it.
+  admin_socket: /run/sysrail/admin.sock
+
+database: /var/lib/sysrail/sysrail.db
+policy_file: /etc/sysrail/policy.yaml
+
+approvals:
+  # Pending requests expire after this long.
+  ttl: 15m
+
+timeouts:
+  read: 10s
+  mutating: 60s
+
+# Optional: let holders of this token use the admin API over HTTP.
+# admin:
+#   token_sha256: ""
+
+# One entry per agent. Create tokens with `sysrail token create`; only the
+# SHA-256 of each token is stored here.
+agents:
+  opencode:
+    token_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+
+providers:
+  linux:
+    enabled: true
+  systemd:
+    enabled: true
+    # Units that can never be started, stopped or restarted. Leaving this
+    # unset uses the built-in list (dbus, systemd-*, polkit, ssh, sshd,
+    # user@*, getty@*). sysrail.service is always protected.
+    # protected_units: ["dbus.service", "systemd-*.service", "ssh.service"]
+
+log:
+  level: info

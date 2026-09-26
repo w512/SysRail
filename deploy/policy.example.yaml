@@ -1,0 +1,26 @@
+# SysRail policy (/etc/sysrail/policy.yaml). Reload with
+# `systemctl reload sysrail` after editing; check with `sysrail policy check`.
+#
+# Rules per agent:
+#   allow - runs immediately
+#   ask   - waits for a human: `sysrail approvals approve <id>`
+#   deny  - always refused
+#
+# Evaluation: any matching deny wins. Otherwise the most specific rule decides
+# (exact resource > resource glob > exact permission > domain.* > "*"), with
+# ask winning ties. Anything not matched is denied.
+#
+# Permissions: system.read, storage.read, network.read, service.read,
+# logs.read, service.start, service.stop, service.restart. "service.*"
+# matches every service permission.
+version: 1
+agents:
+  opencode:
+    allow: [system.read, storage.read, network.read, service.read, logs.read]
+    ask: [service.start, service.restart]
+    deny: [service.stop]
+    # Per-resource exceptions. Keys are verbs (restart -> service.restart)
+    # or full permission names. Names may be globs.
+    resources:
+      service:
+        nginx.service: { restart: allow }
