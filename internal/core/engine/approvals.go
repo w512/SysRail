@@ -10,6 +10,7 @@ import (
 
 	"github.com/w512/SysRail/internal/core"
 	"github.com/w512/SysRail/internal/core/audit"
+	"github.com/w512/SysRail/internal/core/events"
 	"github.com/w512/SysRail/internal/core/policy"
 	"github.com/w512/SysRail/internal/core/request"
 )
@@ -25,6 +26,7 @@ func (e *Engine) Approve(ctx context.Context, id, actor, note string) (*request.
 		request.Update{At: e.now(), DecidedBy: actor, DecisionNote: note}); err != nil {
 		return nil, e.transitionError(id, err)
 	}
+	e.publish(events.RequestApproved, req, request.Approved)
 	rec := audit.Record{
 		Event: audit.EventApproval, Agent: req.Agent, Session: req.Session, Capability: req.Capability,
 		Resource: req.Resource, ArgumentsHash: req.ArgsHash, RequestID: id, Result: audit.ResultApproved,
@@ -39,6 +41,7 @@ func (e *Engine) Approve(ctx context.Context, id, actor, note string) (*request.
 	c, inv, cerr := e.revalidate(req)
 	if cerr != nil {
 		e.fail(ctx, id, cerr)
+		e.publish(events.RequestFailed, req, request.Failed)
 		e.auditResult(ctx, rec, e.now(), cerr)
 		return e.store.GetRequest(ctx, id)
 	}
@@ -87,6 +90,7 @@ func (e *Engine) Deny(ctx context.Context, id, actor, note string) (*request.Req
 		request.Update{At: e.now(), DecidedBy: actor, DecisionNote: note}); err != nil {
 		return nil, e.transitionError(id, err)
 	}
+	e.publish(events.RequestDenied, req, request.Denied)
 	rec := audit.Record{
 		Event: audit.EventApproval, Agent: req.Agent, Session: req.Session, Capability: req.Capability,
 		Resource: req.Resource, ArgumentsHash: req.ArgsHash, RequestID: id, Result: audit.ResultRejected,
@@ -141,6 +145,7 @@ func (e *Engine) expire(ctx context.Context, r *request.Request) {
 		}
 		return
 	}
+	e.publish(events.RequestExpired, r, request.Expired)
 	rec := audit.Record{
 		Event: audit.EventApproval, Agent: r.Agent, Session: r.Session, Capability: r.Capability,
 		Resource: r.Resource, ArgumentsHash: r.ArgsHash, RequestID: r.ID, Result: audit.ResultExpired,

@@ -12,6 +12,7 @@ import (
 
 	"github.com/w512/SysRail/internal/core"
 	"github.com/w512/SysRail/internal/core/audit"
+	"github.com/w512/SysRail/internal/core/events"
 	"github.com/w512/SysRail/internal/core/policy"
 	"github.com/w512/SysRail/internal/core/request"
 	"github.com/w512/SysRail/internal/providers/fake"
@@ -388,6 +389,62 @@ func TestPolicyIsRecheckedOnApproval(t *testing.T) {
 	}
 	if h.fake.Restarts("w") != 0 {
 		t.Fatal("request executed despite policy change")
+	}
+}
+
+func TestLifecycleEvents(t *testing.T) {
+	h := newHarness(t)
+	bus := events.NewBus(16)
+	e, err := New(Options{Registry: h.e.Registry(), Policy: h.e.Policy(), Store: h.store, Events: bus})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx := context.Background()
+	out, _ := e.Execute(ctx, Call{Agent: "agent", Capability: "fake.restart", Args: json.RawMessage(`{"name":"w"}`)})
+	e.Approve(ctx, out.RequestID, "root", "")
+	denied, _ := e.Execute(ctx, Call{Agent: "agent", Capability: "fake.restart", Args: json.RawMessage(`{"name":"x"}`)})
+	e.Deny(ctx, denied.RequestID, "root", "")
+	e.Execute(ctx, Call{Agent: "agent", Capability: "fake.status"})
+
+	replay, _, cancel := bus.Subscribe(0, nil)
+	defer cancel()
+	var got []string
+	for _, ev := range replay {
+		got = append(got, ev.Type)
+		if ev.Agent != "agent" || ev.Data["request_id"] == nil || ev.ResourceKind != "widget" {
+			t.Fatalf("event: %+v", ev)
+		}
+	}
+	want := "request.pending request.approved request.executed request.pending request.denied"
+	if strings.Join(got, " ") != want {
+		t.Fatalf("events %v, want %s (reads emit none)", got, want)
+	}
+}
+
+type tamperStore struct{ *sqlite.Store }
+
+func (s tamperStore) GetRequest(ctx context.Context, id string) (*request.Request, error) {
+	r, err := s.Store.GetRequest(ctx, id)
+	if err == nil && r.Status == request.Pending {
+		r.Args = json.RawMessage(`{"name":"other"}`)
+	}
+	return r, err
+}
+
+func TestTamperedArgumentsAreNotExecuted(t *testing.T) {
+	h := newHarness(t)
+	e, _ := New(Options{Registry: h.e.Registry(), Policy: h.e.Policy(), Store: tamperStore{h.store}})
+	ctx := context.Background()
+	out, _ := e.Execute(ctx, Call{Agent: "agent", Capability: "fake.restart", Args: json.RawMessage(`{"name":"w"}`)})
+	req, err := e.Approve(ctx, out.RequestID, "root", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if req.Status != request.Failed || req.Error == nil || req.Error.Code != core.CodeConflict {
+		t.Fatalf("request: %+v", req)
+	}
+	if h.fake.Restarts("other") != 0 || h.fake.Restarts("w") != 0 {
+		t.Fatal("tampered request executed")
 	}
 }
 

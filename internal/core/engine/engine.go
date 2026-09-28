@@ -18,6 +18,7 @@ import (
 
 	"github.com/w512/SysRail/internal/core"
 	"github.com/w512/SysRail/internal/core/audit"
+	"github.com/w512/SysRail/internal/core/events"
 	"github.com/w512/SysRail/internal/core/policy"
 	"github.com/w512/SysRail/internal/core/redact"
 	"github.com/w512/SysRail/internal/core/request"
@@ -49,6 +50,8 @@ type Options struct {
 	ApprovalTTL time.Duration
 	Logger      *slog.Logger
 	Now         func() time.Time
+	// Events receives request lifecycle events. Optional.
+	Events *events.Bus
 }
 
 // Engine executes capability calls.
@@ -59,6 +62,7 @@ type Engine struct {
 	ttl    time.Duration
 	log    *slog.Logger
 	now    func() time.Time
+	events *events.Bus
 }
 
 // New builds an engine.
@@ -66,7 +70,8 @@ func New(opts Options) (*Engine, error) {
 	if opts.Registry == nil || opts.Policy == nil || opts.Store == nil {
 		return nil, errors.New("engine: registry, policy and store are required")
 	}
-	e := &Engine{reg: opts.Registry, store: opts.Store, ttl: opts.ApprovalTTL, log: opts.Logger, now: opts.Now}
+	e := &Engine{reg: opts.Registry, store: opts.Store, ttl: opts.ApprovalTTL, log: opts.Logger, now: opts.Now,
+		events: opts.Events}
 	if e.ttl <= 0 {
 		e.ttl = 15 * time.Minute
 	}
@@ -85,6 +90,24 @@ func (e *Engine) Registry() *core.Registry { return e.reg }
 
 // Policy returns the active policy.
 func (e *Engine) Policy() *policy.Policy { return e.policy.Load() }
+
+// Events returns the event bus, or nil if events are disabled.
+func (e *Engine) Events() *events.Bus { return e.events }
+
+// publish emits a lifecycle event for a request, owned by its agent.
+func (e *Engine) publish(typ string, r *request.Request, status request.Status) {
+	if e.events == nil {
+		return
+	}
+	ev := events.Event{
+		Type: typ, Source: "core", Agent: r.Agent, Resource: r.Resource,
+		Data: map[string]any{"request_id": r.ID, "capability": r.Capability, "status": string(status)},
+	}
+	if c, ok := e.reg.ByID(r.Capability); ok {
+		ev.ResourceKind = c.ResourceKind
+	}
+	e.events.Publish(ev)
+}
 
 // SetPolicy atomically replaces the active policy.
 func (e *Engine) SetPolicy(p *policy.Policy) { e.policy.Store(p) }
@@ -217,6 +240,7 @@ func (e *Engine) Execute(ctx context.Context, call Call) (*Outcome, error) {
 		return nil, e.storeError("create request", err)
 	}
 	if req.Status == request.Pending {
+		e.publish(events.RequestPending, req, request.Pending)
 		return &Outcome{Status: StatusApprovalRequired, RequestID: req.ID, ExpiresAt: req.ExpiresAt}, nil
 	}
 	return e.complete(ctx, c, inv, req, rec)
@@ -231,6 +255,11 @@ func (e *Engine) complete(ctx context.Context, c *core.Capability, inv *core.Inv
 	}
 	if err := e.store.Transition(context.WithoutCancel(ctx), req.ID, request.Approved, to, upd); err != nil {
 		e.log.Error("record request completion", "request_id", req.ID, "error", err)
+	}
+	if to == request.Executed {
+		e.publish(events.RequestExecuted, req, to)
+	} else {
+		e.publish(events.RequestFailed, req, to)
 	}
 	e.auditResult(ctx, rec, start, rerr)
 	if rerr != nil {
