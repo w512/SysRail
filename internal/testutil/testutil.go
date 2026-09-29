@@ -10,6 +10,7 @@ import (
 	"github.com/w512/SysRail/internal/auth"
 	"github.com/w512/SysRail/internal/core"
 	"github.com/w512/SysRail/internal/core/engine"
+	"github.com/w512/SysRail/internal/core/events"
 	"github.com/w512/SysRail/internal/core/policy"
 	"github.com/w512/SysRail/internal/providers/fake"
 	"github.com/w512/SysRail/internal/store/sqlite"
@@ -36,6 +37,7 @@ type Env struct {
 	Store  *sqlite.Store
 	Fake   *fake.Provider
 	Auth   *auth.Authenticator
+	Bus    *events.Bus
 	// Tokens maps agent name to bearer token.
 	Tokens map[string]string
 }
@@ -77,9 +79,12 @@ func NewEnv(t testing.TB, policyYAML string) *Env {
 	if err != nil {
 		t.Fatal(err)
 	}
-	eng, err := engine.New(engine.Options{Registry: reg, Policy: pol, Store: store, ApprovalTTL: 10 * time.Minute})
+	bus := events.NewBus(256)
+	eng, err := engine.New(engine.Options{
+		Registry: reg, Policy: pol, Store: store, ApprovalTTL: 10 * time.Minute, Events: bus,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &Env{Engine: eng, Store: store, Fake: fp, Auth: authn, Tokens: tokens}
+	return &Env{Engine: eng, Store: store, Fake: fp, Auth: authn, Bus: bus, Tokens: tokens}
 }

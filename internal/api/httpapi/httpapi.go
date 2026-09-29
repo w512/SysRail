@@ -24,6 +24,7 @@ import (
 	"github.com/w512/SysRail/internal/core"
 	"github.com/w512/SysRail/internal/core/audit"
 	"github.com/w512/SysRail/internal/core/engine"
+	"github.com/w512/SysRail/internal/core/events"
 	"github.com/w512/SysRail/internal/core/request"
 	"github.com/w512/SysRail/internal/version"
 )
@@ -113,6 +114,10 @@ func NewAgentHandler(eng *engine.Engine, authn *auth.Authenticator, log *slog.Lo
 			Args: body.Arguments, Reason: body.Reason, IdempotencyKey: body.IdempotencyKey,
 		})
 		writeOutcome(w, out, xerr)
+	}))
+	mux.HandleFunc("GET /v1/events", requireAgent(func(w http.ResponseWriter, r *http.Request) {
+		agent := r.Context().Value(agentKey{}).(string)
+		serveEvents(eng.Events(), agentEventFilter(eng, agent))(w, r)
 	}))
 	mux.HandleFunc("GET /v1/requests/{id}", requireAgent(func(w http.ResponseWriter, r *http.Request) {
 		session, err := session(r)
@@ -207,6 +212,7 @@ func NewAdminHandler(eng *engine.Engine, actor ActorFunc, log *slog.Logger) http
 			writeJSON(w, http.StatusOK, req)
 		}
 	}
+	mux.HandleFunc("GET /v1/events", serveEvents(eng.Events(), func(events.Event) bool { return true }))
 	mux.HandleFunc("POST /v1/requests/{id}/approve", decide(eng.Approve))
 	mux.HandleFunc("POST /v1/requests/{id}/deny", decide(eng.Deny))
 	mux.HandleFunc("GET /v1/audit", func(w http.ResponseWriter, r *http.Request) {
@@ -351,6 +357,9 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.status = code
 	s.ResponseWriter.WriteHeader(code)
 }
+
+// Unwrap lets http.ResponseController reach the underlying writer.
+func (s *statusRecorder) Unwrap() http.ResponseWriter { return s.ResponseWriter }
 
 func logRequests(log *slog.Logger, api string, next http.Handler) http.Handler {
 	if log == nil {
