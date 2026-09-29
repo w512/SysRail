@@ -47,6 +47,8 @@ type Options struct {
 	ProtectedUnits []string
 	// MaxLogBytes caps the total size of returned log messages. Default 256 KiB.
 	MaxLogBytes int
+	// WatchInterval is how often Watch polls unit states. Default 5s.
+	WatchInterval time.Duration
 }
 
 // Provider is the systemd provider.
