@@ -104,10 +104,23 @@ func TestDaemonServesAgentAndAdminSockets(t *testing.T) {
 		t.Fatal("invalid policy accepted on reload")
 	}
 
+	// An open event stream must not hold up shutdown.
+	streamDone := make(chan struct{})
+	go func() {
+		defer close(streamDone)
+		admin.Do(context.Background(), http.MethodGet, "/v1/events", nil, nil)
+	}()
+	time.Sleep(100 * time.Millisecond)
+
+	start := time.Now()
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatal(err)
 	}
+	if took := time.Since(start); took > 3*time.Second {
+		t.Fatalf("shutdown with an open event stream took %s", took)
+	}
+	<-streamDone
 	for _, p := range []string{cfg.Server.AdminSocket, cfg.Server.AgentSocket} {
 		if _, err := os.Stat(p); !os.IsNotExist(err) {
 			t.Fatalf("%s not removed on shutdown", p)

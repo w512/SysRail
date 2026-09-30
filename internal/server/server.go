@@ -21,6 +21,7 @@ import (
 	"github.com/w512/SysRail/internal/config"
 	"github.com/w512/SysRail/internal/core"
 	"github.com/w512/SysRail/internal/core/engine"
+	"github.com/w512/SysRail/internal/core/events"
 	"github.com/w512/SysRail/internal/core/policy"
 	"github.com/w512/SysRail/internal/core/request"
 	"github.com/w512/SysRail/internal/providers"
@@ -63,6 +64,7 @@ type Daemon struct {
 	engine *engine.Engine
 	authn  *auth.Authenticator
 	provs  []providers.Provider
+	bus    *events.Bus
 }
 
 // New builds a daemon from cfg.
@@ -84,7 +86,7 @@ func New(cfg *config.Config, factory ProviderFactory, log *slog.Logger) (*Daemon
 	if err != nil {
 		return nil, err
 	}
-	d := &Daemon{cfg: cfg, log: log, store: store, provs: provs}
+	d := &Daemon{cfg: cfg, log: log, store: store, provs: provs, bus: events.NewBus(1024)}
 	if err := d.init(); err != nil {
 		store.Close()
 		return nil, err
@@ -106,6 +108,7 @@ func (d *Daemon) init() error {
 	}
 	d.engine, err = engine.New(engine.Options{
 		Registry: reg, Policy: pol, Store: d.store, ApprovalTTL: d.cfg.Approvals.TTL, Logger: d.log,
+		Events: d.bus,
 	})
 	return err
 }
@@ -140,9 +143,14 @@ func (d *Daemon) Run(ctx context.Context) error {
 			l.ln.Close()
 		}
 	}
+	// Canceled on shutdown so long-lived requests (event streams) end.
+	// Mutations are detached from request cancellation by the engine.
+	baseCtx, cancelBase := context.WithCancel(context.Background())
+	defer cancelBase()
 	newServer := func(h http.Handler, connCtx func(context.Context, net.Conn) context.Context) *http.Server {
 		return &http.Server{
 			Handler:           h,
+			BaseContext:       func(net.Listener) context.Context { return baseCtx },
 			ReadHeaderTimeout: 10 * time.Second,
 			ReadTimeout:       30 * time.Second,
 			WriteTimeout:      11 * time.Minute,
@@ -187,6 +195,21 @@ func (d *Daemon) Run(ctx context.Context) error {
 
 	errc := make(chan error, len(lns))
 	var wg sync.WaitGroup
+	watchCtx, stopWatchers := context.WithCancel(ctx)
+	defer stopWatchers()
+	for _, p := range d.provs {
+		if src, ok := p.(providers.EventSource); ok {
+			d.log.Info("watching for events", "provider", p.Name())
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				src.Watch(watchCtx, func(e events.Event) {
+					e = d.bus.Publish(e)
+					d.log.Info("event", "type", e.Type, "resource", e.Resource)
+				})
+			}()
+		}
+	}
 	for _, l := range lns {
 		d.log.Info("listening", "on", l.name)
 		wg.Add(1)
@@ -220,6 +243,8 @@ loop:
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	stopWatchers()
+	cancelBase()
 	for _, l := range lns {
 		l.srv.Shutdown(shutdownCtx)
 	}
