@@ -128,6 +128,28 @@ func TestDaemonServesAgentAndAdminSockets(t *testing.T) {
 	}
 }
 
+func TestDaemonRefusesToStartWithBadPolicy(t *testing.T) {
+	dir := shortDir(t)
+	_, hash, _ := auth.NewToken()
+	cfg := config.Default()
+	cfg.Database = filepath.Join(dir, "sysrail.db")
+	cfg.PolicyFile = filepath.Join(dir, "policy.yaml")
+	cfg.Agents = map[string]config.Agent{"agent": {TokenSHA256: hash}}
+	for name, body := range map[string]string{
+		"typo":          "version: 1\nagents:\n  agent:\n    allow: [fake.raed]\n",
+		"unknown agent": "version: 1\nagents:\n  stranger:\n    allow: [fake.read]\n",
+		"unknown field": "version: 1\nagent:\n  agent: {}\n",
+	} {
+		os.WriteFile(cfg.PolicyFile, []byte(body), 0o600)
+		if d, err := New(cfg, func(*config.Config, *slog.Logger) ([]providers.Provider, error) {
+			return []providers.Provider{fake.New()}, nil
+		}, slog.New(slog.DiscardHandler)); err == nil {
+			d.Close()
+			t.Errorf("%s: daemon started with an invalid policy", name)
+		}
+	}
+}
+
 func TestListenUnixRefusesToReplaceRegularFile(t *testing.T) {
 	path := filepath.Join(shortDir(t), "x.sock")
 	os.WriteFile(path, []byte("data"), 0o600)
