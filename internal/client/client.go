@@ -55,6 +55,17 @@ func New(target, token string) (*Client, error) {
 // SetHeader adds a header to every request.
 func (c *Client) SetHeader(name, value string) { c.headers[name] = value }
 
+// WithHeader returns a copy of c that also sends the given header.
+func (c *Client) WithHeader(name, value string) *Client {
+	cp := *c
+	cp.headers = make(map[string]string, len(c.headers)+1)
+	for k, v := range c.headers {
+		cp.headers[k] = v
+	}
+	cp.headers[name] = value
+	return &cp
+}
+
 // Do sends a request and decodes the JSON response into out (if non-nil).
 // API errors are returned as *core.Error; the HTTP status is returned too.
 func (c *Client) Do(ctx context.Context, method, path string, body, out any) (int, error) {

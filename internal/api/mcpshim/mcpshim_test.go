@@ -138,6 +138,22 @@ func TestCallsGoThroughTheDaemon(t *testing.T) {
 	}
 }
 
+func TestHostSessionIDIsAudited(t *testing.T) {
+	env := testutil.NewEnv(t, testutil.Policy)
+	cs := connect(t, env, "agent")
+	for _, sess := range []string{"ses_opencode42", "bad session!"} {
+		if _, err := cs.CallTool(context.Background(), &mcp.CallToolParams{
+			Meta: mcp.Meta{"ai.opencode/sessionID": sess}, Name: "fake_get_status",
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	recs, _ := env.Store.List(context.Background(), audit.Filter{Limit: 4})
+	if recs[0].Session != "ses_opencode42" || recs[2].Session != "sess_test" {
+		t.Fatalf("sessions: %q %q (invalid host IDs fall back to the shim session)", recs[0].Session, recs[2].Session)
+	}
+}
+
 func TestDeniedCall(t *testing.T) {
 	env := testutil.NewEnv(t, testutil.Policy)
 	cs := connect(t, env, "other")

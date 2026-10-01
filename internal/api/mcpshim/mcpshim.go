@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"regexp"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -82,7 +83,7 @@ func handler(c *client.Client, ci httpapi.CapabilityInfo) mcp.ToolHandler {
 		body.Arguments, _ = json.Marshal(args)
 
 		var out engine.Outcome
-		if _, err := c.Do(ctx, http.MethodPost, "/v1/execute", body, &out); err != nil {
+		if _, err := clientFor(c, req).Do(ctx, http.MethodPost, "/v1/execute", body, &out); err != nil {
 			var cerr *core.Error
 			if !errors.As(err, &cerr) {
 				cerr = core.Errorf(core.CodeExecutionFailed, "%v", err)
@@ -112,6 +113,25 @@ func handler(c *client.Client, ci httpapi.CapabilityInfo) mcp.ToolHandler {
 			}, nil
 		}
 	}
+}
+
+// hostSessionKeys are _meta keys agent hosts use for their session ID.
+var hostSessionKeys = []string{"ai.opencode/sessionID"}
+
+var sessionPattern = regexp.MustCompile(`^[A-Za-z0-9_.:-]{1,64}$`)
+
+// clientFor uses the agent host's session ID, when it sends one, as the audit
+// session so records can be matched to the conversation that made them.
+func clientFor(c *client.Client, req *mcp.CallToolRequest) *client.Client {
+	if req.Params == nil {
+		return c
+	}
+	for _, key := range hostSessionKeys {
+		if s, ok := req.Params.Meta[key].(string); ok && sessionPattern.MatchString(s) {
+			return c.WithHeader(httpapi.SessionHeader, s)
+		}
+	}
+	return c
 }
 
 func errorResult(e *core.Error) *mcp.CallToolResult {
