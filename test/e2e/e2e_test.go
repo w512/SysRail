@@ -6,6 +6,7 @@
 package e2e
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -255,6 +256,34 @@ func TestReadOnlyAgentSeesOnlyItsTools(t *testing.T) {
 	}
 	gpu := mustCall(t, cs, "system_get_gpu_status", nil)
 	t.Logf("GPU available: %v", gpu["available"])
+}
+
+// TestServiceFailureEvent checks that a crash is pushed to an agent that may
+// read the service (spec §20).
+func TestServiceFailureEvent(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet,
+		"http://127.0.0.1:9487/v1/events?types=service.failed", nil)
+	req.Header.Set("Authorization", "Bearer "+token(t, "e2e"))
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusOK {
+		t.Fatalf("subscribe: %v %v", err, resp)
+	}
+	defer resp.Body.Close()
+	time.Sleep(6 * time.Second) // let the watcher record a baseline
+
+	failDummy(t)
+	t.Cleanup(func() { exec.Command("systemctl", "reset-failed", dummy).Run() })
+	sc := bufio.NewScanner(resp.Body)
+	for sc.Scan() {
+		line := sc.Text()
+		if strings.HasPrefix(line, "data: ") && strings.Contains(line, dummy) {
+			t.Logf("received %s", line)
+			return
+		}
+	}
+	t.Fatalf("no service.failed event for %s: %v", dummy, sc.Err())
 }
 
 func TestSocketsAreNotOpenToOtherUsers(t *testing.T) {
