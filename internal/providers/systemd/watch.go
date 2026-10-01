@@ -41,9 +41,12 @@ func (p *Provider) Watch(ctx context.Context, publish func(events.Event)) {
 					default:
 						continue
 					}
+					data := map[string]any{"active_state": u.ActiveState, "sub_state": u.SubState}
+					if old != "" { // empty when the unit was not loaded before
+						data["previous_state"] = old
+					}
 					publish(events.Event{
-						Type: typ, Source: "systemd", ResourceKind: "service", Resource: name,
-						Data: map[string]any{"previous_state": old, "active_state": u.ActiveState, "sub_state": u.SubState},
+						Type: typ, Source: "systemd", ResourceKind: "service", Resource: name, Data: data,
 					})
 				}
 			}
