@@ -10,6 +10,7 @@ import (
 
 	"github.com/w512/SysRail/internal/auth"
 	"github.com/w512/SysRail/internal/core/audit"
+	"github.com/w512/SysRail/internal/core/engine"
 	"github.com/w512/SysRail/internal/testutil"
 )
 
@@ -206,5 +207,28 @@ func TestWithAdminToken(t *testing.T) {
 	}
 	if status, body := admin.do("POST", "/v1/requests/"+id+"/approve", `{}`); status != 200 || body["status"] != "executed" {
 		t.Fatalf("admin approve: %d %v", status, body)
+	}
+}
+
+func TestRateLimitedResponse(t *testing.T) {
+	env := testutil.NewEnv(t, testutil.Policy, func(o *engine.Options) {
+		o.Limits = func(string) engine.Limits { return engine.Limits{CallsPerMinute: 1, Burst: 1} }
+	})
+	srv := httptest.NewServer(NewAgentHandler(env.Engine, env.Auth, nil))
+	t.Cleanup(srv.Close)
+	agent := client{t, srv.URL, env.Tokens["agent"]}
+	agent.do("POST", "/v1/execute", `{"capability":"fake.status"}`)
+
+	req, _ := http.NewRequest("POST", srv.URL+"/v1/execute", strings.NewReader(`{"capability":"fake.status"}`))
+	req.Header.Set("Authorization", "Bearer "+env.Tokens["agent"])
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var body ErrorBody
+	json.NewDecoder(resp.Body).Decode(&body)
+	if resp.StatusCode != 429 || resp.Header.Get("Retry-After") == "" || body.Error.Code != "RATE_LIMITED" {
+		t.Fatalf("status %d, Retry-After %q, body %+v", resp.StatusCode, resp.Header.Get("Retry-After"), body.Error)
 	}
 }

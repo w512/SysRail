@@ -112,6 +112,10 @@ func (d *Daemon) init() error {
 	d.engine, err = engine.New(engine.Options{
 		Registry: reg, Policy: pol, Store: d.store, ApprovalTTL: d.cfg.Approvals.TTL, Logger: d.log,
 		Events: d.bus,
+		Limits: func(agent string) engine.Limits {
+			l := d.cfg.LimitsFor(agent)
+			return engine.Limits{CallsPerMinute: l.CallsPerMinute, Burst: l.Burst, MaxPending: l.MaxPending}
+		},
 	})
 	if err != nil {
 		return err
@@ -269,6 +273,7 @@ loop:
 			runErr = err
 			break loop
 		case <-ticker.C:
+			d.engine.FlushRateLimits(context.Background(), false)
 			if n, err := d.engine.ExpireStale(context.Background()); err != nil {
 				d.log.Error("expire stale requests", "error", err)
 			} else if n > 0 {
@@ -281,6 +286,7 @@ loop:
 	defer cancel()
 	stopWatchers()
 	cancelBase()
+	d.engine.FlushRateLimits(context.Background(), true)
 	for _, l := range lns {
 		l.srv.Shutdown(shutdownCtx)
 	}

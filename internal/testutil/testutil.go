@@ -42,8 +42,9 @@ type Env struct {
 	Tokens map[string]string
 }
 
-// NewEnv builds an environment with agents "agent" and "other".
-func NewEnv(t testing.TB, policyYAML string) *Env {
+// NewEnv builds an environment with agents "agent" and "other". opts may
+// adjust the engine options, e.g. to set limits.
+func NewEnv(t testing.TB, policyYAML string, opts ...func(*engine.Options)) *Env {
 	t.Helper()
 	store, err := sqlite.Open(filepath.Join(t.TempDir(), "sysrail.db"))
 	if err != nil {
@@ -80,9 +81,11 @@ func NewEnv(t testing.TB, policyYAML string) *Env {
 		t.Fatal(err)
 	}
 	bus := events.NewBus(256)
-	eng, err := engine.New(engine.Options{
-		Registry: reg, Policy: pol, Store: store, ApprovalTTL: 10 * time.Minute, Events: bus,
-	})
+	eo := engine.Options{Registry: reg, Policy: pol, Store: store, ApprovalTTL: 10 * time.Minute, Events: bus}
+	for _, o := range opts {
+		o(&eo)
+	}
+	eng, err := engine.New(eo)
 	if err != nil {
 		t.Fatal(err)
 	}

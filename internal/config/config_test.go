@@ -71,6 +71,9 @@ func TestValidation(t *testing.T) {
 		{"admin reuse", "admin:\n  token_sha256: " + h + "\nagents:\n  a:\n    token_sha256: " + h + "\n", "reuse the admin token"},
 		{"log level", "log:\n  level: loud\n", "log.level"},
 		{"retention", "audit:\n  retention_days: -1\n", "audit.retention_days"},
+		{"rate", "limits:\n  calls_per_minute: -5\n", "limits.calls_per_minute"},
+		{"burst", "limits:\n  burst: 0\n", "limits.burst must be at least 1"},
+		{"agent burst", "agents:\n  a:\n    token_sha256: " + h + "\n    limits:\n      burst: 0\n", "agents.a.limits.burst"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -179,5 +182,30 @@ func TestExampleConfigLoads(t *testing.T) {
 	}
 	if cfg.Audit.RetentionDays != 90 || cfg.ArchiveDirectory() != "/var/lib/sysrail/archive" {
 		t.Fatalf("example audit settings: %+v", cfg.Audit)
+	}
+}
+
+func TestLimits(t *testing.T) {
+	h := auth.Hash("x")
+	cfg, err := Load(write(t, `
+limits:
+  calls_per_minute: 60
+agents:
+  bot:
+    token_sha256: `+h+`
+    limits:
+      calls_per_minute: 0
+      max_pending: 3
+  plain:
+    token_sha256: `+auth.Hash("y")+`
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := cfg.LimitsFor("plain"); got != (Limits{CallsPerMinute: 60, Burst: 30, MaxPending: 10}) {
+		t.Fatalf("plain agent inherits: %+v", got)
+	}
+	if got := cfg.LimitsFor("bot"); got != (Limits{CallsPerMinute: 0, Burst: 30, MaxPending: 3}) {
+		t.Fatalf("overrides, including 0 = unlimited: %+v", got)
 	}
 }

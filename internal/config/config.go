@@ -27,6 +27,7 @@ type Config struct {
 	PolicyFile string           `yaml:"policy_file"`
 	Approvals  Approvals        `yaml:"approvals"`
 	Audit      Audit            `yaml:"audit"`
+	Limits     Limits           `yaml:"limits"`
 	Timeouts   Timeouts         `yaml:"timeouts"`
 	Admin      Admin            `yaml:"admin"`
 	Agents     map[string]Agent `yaml:"agents"`
@@ -95,6 +96,55 @@ type Admin struct {
 // Agent is an agent identity.
 type Agent struct {
 	TokenSHA256 string `yaml:"token_sha256"`
+	// Limits overrides the global limits for this agent.
+	Limits *AgentLimits `yaml:"limits"`
+}
+
+// Limits bound each agent. Zero disables a limit.
+type Limits struct {
+	// CallsPerMinute is the sustained rate of calls across all tools.
+	CallsPerMinute int `yaml:"calls_per_minute"`
+	// Burst is how many calls may be made back to back.
+	Burst int `yaml:"burst"`
+	// MaxPending caps requests waiting for approval at the same time.
+	MaxPending int `yaml:"max_pending"`
+}
+
+// AgentLimits overrides individual global limits; unset fields inherit.
+type AgentLimits struct {
+	CallsPerMinute *int `yaml:"calls_per_minute"`
+	Burst          *int `yaml:"burst"`
+	MaxPending     *int `yaml:"max_pending"`
+}
+
+// LimitsFor returns the effective limits for an agent.
+func (c *Config) LimitsFor(agent string) Limits {
+	l := c.Limits
+	if a, ok := c.Agents[agent]; ok && a.Limits != nil {
+		if a.Limits.CallsPerMinute != nil {
+			l.CallsPerMinute = *a.Limits.CallsPerMinute
+		}
+		if a.Limits.Burst != nil {
+			l.Burst = *a.Limits.Burst
+		}
+		if a.Limits.MaxPending != nil {
+			l.MaxPending = *a.Limits.MaxPending
+		}
+	}
+	return l
+}
+
+func (l Limits) validate(where string, fail func(string, ...any)) {
+	switch {
+	case l.CallsPerMinute < 0 || l.CallsPerMinute > 100000:
+		fail("%s.calls_per_minute must be between 0 (unlimited) and 100000", where)
+	case l.Burst < 0 || l.Burst > 10000:
+		fail("%s.burst must be between 0 and 10000", where)
+	case l.CallsPerMinute > 0 && l.Burst < 1:
+		fail("%s.burst must be at least 1 when calls_per_minute is set", where)
+	case l.MaxPending < 0 || l.MaxPending > 10000:
+		fail("%s.max_pending must be between 0 (unlimited) and 10000", where)
+	}
 }
 
 // Providers enables and configures providers.
@@ -133,6 +183,7 @@ func Default() *Config {
 		PolicyFile: "/etc/sysrail/policy.yaml",
 		Approvals:  Approvals{TTL: 15 * time.Minute},
 		Audit:      Audit{RetentionDays: 90, Archive: true},
+		Limits:     Limits{CallsPerMinute: 120, Burst: 30, MaxPending: 10},
 		Timeouts:   Timeouts{Read: 10 * time.Second, Mutating: 60 * time.Second},
 		Providers:  Providers{Linux: Linux{Enabled: true}, Systemd: Systemd{Enabled: true}},
 		Log:        Log{Level: "info"},
@@ -201,6 +252,7 @@ func (c *Config) Validate() error {
 	if c.PolicyFile == "" {
 		fail("policy_file is required")
 	}
+	c.Limits.validate("limits", fail)
 	if c.Audit.RetentionDays < 0 || c.Audit.RetentionDays > 36500 {
 		fail("audit.retention_days must be between 0 (keep forever) and 36500")
 	}
@@ -229,6 +281,9 @@ func (c *Config) Validate() error {
 		}
 		if c.Agents[n].TokenSHA256 == c.Admin.TokenSHA256 && c.Admin.TokenSHA256 != "" {
 			fail("agents.%s: must not reuse the admin token", n)
+		}
+		if c.Agents[n].Limits != nil {
+			c.LimitsFor(n).validate("agents."+n+".limits", fail)
 		}
 	}
 	if _, err := auth.NewAuthenticator(c.AgentHashes()); err != nil {

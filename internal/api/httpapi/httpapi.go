@@ -339,6 +339,9 @@ func writeOutcome(w http.ResponseWriter, out *engine.Outcome, err error) {
 }
 
 func writeError(w http.ResponseWriter, err *core.Error) {
+	if n, ok := err.Details["retry_after_seconds"].(int); ok && n > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(n))
+	}
 	writeJSON(w, err.Code.HTTPStatus(), ErrorBody{Error: err})
 }
 

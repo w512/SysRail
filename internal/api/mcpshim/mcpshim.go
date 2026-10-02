@@ -29,7 +29,8 @@ const Instructions = `SysRail exposes typed, policy-controlled operations on thi
 	`tell the user and poll request_get_status with the request_id (use wait_seconds up to 30) ` +
 	`until the status is executed, failed, denied or expired. Pass a short "reason" with ` +
 	`mutating calls; it is shown to the approver. Errors are structured with a code such as ` +
-	`PERMISSION_DENIED; do not retry denied requests.`
+	`PERMISSION_DENIED; do not retry denied requests. On RATE_LIMITED, wait ` +
+	`details.retry_after_seconds before calling again, or for pending requests to be decided.`
 
 // New builds an MCP server for the agent authenticated by c.
 func New(ctx context.Context, c *client.Client) (*mcp.Server, error) {
