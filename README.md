@@ -13,7 +13,7 @@ append-only audit log.
 Status: Stage 1, generic Linux (`linux/amd64`, systemd).
 
 Documentation: [installation guide](docs/install.md) ·
-[usage guide](docs/usage.md).
+[usage guide](docs/usage.md) · [security model](docs/security.md).
 
 ## Tools
 
@@ -219,6 +219,12 @@ Errors are always structured, for example
   JWTs, URL credentials) are redacted on a best-effort basis.
 - Agent tokens are stored as SHA-256 hashes and compared in constant time.
   The audit table rejects updates and deletes.
+
+SysRail only controls what passes through it: an agent whose host also gives
+it a shell, sudo or the Docker group can bypass it. The
+[security model](docs/security.md) covers this and the other limitations, and
+ends with a hardening checklist. Report vulnerabilities as described in
+[SECURITY.md](SECURITY.md).
 
 ## Development
 
