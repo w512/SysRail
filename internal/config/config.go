@@ -31,7 +31,10 @@ type Config struct {
 	Admin      Admin            `yaml:"admin"`
 	Agents     map[string]Agent `yaml:"agents"`
 	Providers  Providers        `yaml:"providers"`
-	Log        Log              `yaml:"log"`
+	// Notifications are sent from the daemon; secrets here are why the
+	// config file must stay readable only by root and the sysrail group.
+	Notifications Notifications `yaml:"notifications"`
+	Log           Log           `yaml:"log"`
 }
 
 // Server configures listeners.
@@ -231,6 +234,7 @@ func (c *Config) Validate() error {
 	if _, err := auth.NewAuthenticator(c.AgentHashes()); err != nil {
 		fail("agents: %v", err)
 	}
+	c.Notifications.validate(fail)
 	switch c.Log.Level {
 	case "debug", "info", "warn", "error":
 	default:

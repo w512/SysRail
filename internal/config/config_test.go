@@ -114,3 +114,55 @@ func TestRemoteBindCanBeAllowed(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestNotificationsConfig(t *testing.T) {
+	cfg, err := Load(write(t, `
+notifications:
+  webhooks:
+    - url: https://hooks.example.com/sysrail
+      headers: {Authorization: "Bearer x"}
+  ntfy:
+    - url: https://ntfy.sh/my-sysrail
+      events: [request.pending, service.failed]
+  telegram:
+    - bot_token: "123456:ABC-def"
+      chat_id: -1001234567890
+  email:
+    - smtp_host: smtp.example.com
+      username: bot
+      password: secret
+      from: SysRail <sysrail@example.com>
+      to: [ops@example.com]
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := cfg.Notifications
+	if n.Count() != 4 || n.Telegram[0].ChatID != "-1001234567890" || n.Ntfy[0].Events[1] != "service.failed" {
+		t.Fatalf("notifications: %+v", n)
+	}
+}
+
+func TestNotificationsValidation(t *testing.T) {
+	tests := []struct{ name, body, want string }{
+		{"webhook url", "notifications:\n  webhooks:\n    - url: ftp://x\n", "absolute http(s) URL"},
+		{"ntfy topic", "notifications:\n  ntfy:\n    - url: https://ntfy.sh/\n", "must include the topic"},
+		{"event", "notifications:\n  webhooks:\n    - url: https://x\n      events: [request.pendng]\n", "unknown event"},
+		{"telegram token", "notifications:\n  telegram:\n    - chat_id: \"1\"\n", "bot_token is required"},
+		{"telegram chat", "notifications:\n  telegram:\n    - bot_token: \"1:a\"\n", "chat_id is required"},
+		{"email tls", "notifications:\n  email:\n    - smtp_host: h\n      tls: ssl\n      from: a@b.c\n      to: [d@e.f]\n", "tls must be"},
+		{"email plaintext password", "notifications:\n  email:\n    - smtp_host: h\n      tls: none\n      username: u\n      password: p\n      from: a@b.c\n      to: [d@e.f]\n", "unencrypted"},
+		{"email half credentials", "notifications:\n  email:\n    - smtp_host: h\n      username: u\n      from: a@b.c\n      to: [d@e.f]\n", "both username and password"},
+		{"email from", "notifications:\n  email:\n    - smtp_host: h\n      from: nope\n      to: [d@e.f]\n", "not a valid address"},
+		{"email to", "notifications:\n  email:\n    - smtp_host: h\n      from: a@b.c\n", "at least one recipient"},
+		{"unknown key", "notifications:\n  slack:\n    - url: https://x\n", "field slack not found"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := Load(write(t, tt.body))
+			if err == nil || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("got %v, want error containing %q", err, tt.want)
+			}
+		})
+	}
+}
