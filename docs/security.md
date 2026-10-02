@@ -66,7 +66,10 @@ meant to be sufficient on its own.
    privileges, and restricts namespaces, address families and kernel
    tunables.
 9. **Limits.** Every operation has a timeout. Request bodies are limited to
-   1 MiB, log output to 256 KiB, and list results to fixed maximums.
+   1 MiB, log output to 256 KiB, and list results to fixed maximums. Each
+   agent has a call rate limit and a cap on requests waiting for approval.
+   Rejected calls are audited in summary form, so a flood can't fill the
+   audit log.
 10. **Audit.** Every call is written to the audit log before anything runs,
     including reads, refusals and invalid calls. If the record cannot be
     written, the call is refused. The audit table rejects updates. Deletes
@@ -120,9 +123,12 @@ rights as different users.
 If you enable `admin.token_sha256`, whoever holds that token can approve
 requests over HTTP, so keep it away from anything an agent can reach.
 
-**Resource exhaustion.** There is no rate limiting. A misbehaving agent can
-fill the approval queue and make the audit database grow quickly between
-retention runs.
+**Resource exhaustion.** Per-agent limits cap how fast an agent can call and
+how many requests it can leave waiting. Within those limits, an agent can
+still keep the approval queue full of requests you have to deny, and a fast
+agent still adds audit records quickly. Requests without a valid token are
+rejected before any of this, but they are neither rate limited nor audited.
+Only the local machine can reach the API by default.
 
 **Notifications leave the host.** Notification messages contain the host
 name, agent, capability, resource and the agent's reason. They go to

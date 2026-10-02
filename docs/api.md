@@ -22,6 +22,10 @@ examples, see [usage.md](usage.md#http-api).
   responses, so clients should ignore fields they don't know.
 - **Unknown paths and methods** return `404` with error code
   `RESOURCE_NOT_FOUND`.
+- **Limits.** Agent calls count against per-agent limits (see
+  [install.md](install.md#limits)). Every `/v1/execute` call and every
+  `/v1/requests/{id}` poll counts toward the call rate. Calls over a limit
+  return `429 RATE_LIMITED`.
 
 ### Authentication
 
@@ -61,6 +65,7 @@ Every error response has a JSON body:
 | `PERMISSION_DENIED` | 403 | Denied by policy, a protected unit, or polkit |
 | `RESOURCE_NOT_FOUND` | 404 | Unknown capability, unit, request or path |
 | `CONFLICT` | 409 | Request already decided or expired, idempotency key reused, systemd job canceled |
+| `RATE_LIMITED` | 429 | The agent exceeded its call rate (`details.retry_after_seconds`, also sent as the `Retry-After` header) or has too many requests waiting for approval; retryable |
 | `EXECUTION_FAILED` | 500 | The operation failed. Also returned with `retryable: true` when the audit log or request store is unavailable. |
 | `PROVIDER_UNAVAILABLE` | 503 | A data source (systemd, journald, `/proc`) could not be reached; retryable |
 | `TIMEOUT` | 504 | The operation exceeded its timeout; retryable |
@@ -357,14 +362,14 @@ arguments, the approver's identity and the policy rule.
 |---|---|---|
 | `id` | int | Increasing record ID |
 | `timestamp` | time | When the record was written |
-| `event` | string | `request` (before anything runs), `result` (after a call ran), `approval` (decision or expiry) or `retention` (old records were archived and removed) |
+| `event` | string | `request` (before anything runs), `result` (after a call ran), `approval` (decision or expiry), `retention` (old records were archived and removed) or `rate_limit` (summary of rate-limited calls that were not recorded one by one) |
 | `agent`, `session` | string, optional | Caller |
 | `capability`, `resource` | string, optional | What was called, on what |
 | `arguments` | object, optional | Normalized arguments with secrets redacted (`request` records only) |
 | `arguments_hash` | string, optional | SHA-256 of the unredacted arguments |
 | `policy_decision`, `policy_rule` | string, optional | `allow`, `ask` or `deny`, and the rule that matched |
 | `request_id` | string, optional | Tracked request, if any |
-| `result` | string | `started`, `success`, `error`, `denied`, `invalid`, `approval_required`, `duplicate`, `approved`, `rejected`, `expired` or `pruned` |
+| `result` | string | `started`, `success`, `error`, `denied`, `invalid`, `approval_required`, `duplicate`, `approved`, `rejected`, `expired`, `pruned` or `rate_limited` |
 | `error_code`, `error_message` | string, optional | For errors and refusals |
 | `duration_ms` | int, optional | Execution time (`result` records) |
 | `actor` | string, optional | Approver identity (`approval` and approved `result` records); `system` for expiry and retention |

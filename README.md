@@ -187,7 +187,10 @@ sudo sysrail audit --request req_… --json
 ```
 
 Every call is audited before anything runs, reads included. If the audit log
-cannot be written, the request is refused. Records are kept for 90 days by
+cannot be written, the request is refused. Each agent has a call budget (by
+default 120 calls a minute, 30 back to back) and may leave at most 10
+requests waiting for approval. Calls over the budget fail with
+`RATE_LIMITED`. Records are kept for 90 days by
 default, then written to compressed archives and removed from the database.
 
 `GET /v1/events` streams Server-Sent Events: request lifecycle events and

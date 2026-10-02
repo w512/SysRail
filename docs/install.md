@@ -193,6 +193,9 @@ resolved against the file's directory.
 | `database` | `/var/lib/sysrail/sysrail.db` | SQLite file for the audit log and requests. |
 | `policy_file` | `/etc/sysrail/policy.yaml` | |
 | `approvals.ttl` | `15m` | How long a request waits for approval (1m to 24h). |
+| `limits.calls_per_minute` | `120` | Sustained calls per agent across all tools. `0` = unlimited. See [Limits](#limits). |
+| `limits.burst` | `30` | Calls an agent may make back to back. |
+| `limits.max_pending` | `10` | Requests per agent waiting for approval at once. `0` = unlimited. |
 | `audit.retention_days` | `90` | Days to keep audit records and finished requests (checked at startup and hourly). `0` keeps everything. See [Audit retention](#audit-retention). |
 | `audit.archive` | `true` | Write removed records to compressed archives first. |
 | `audit.archive_dir` | `archive` next to the database | Where archives are written. |
@@ -200,6 +203,7 @@ resolved against the file's directory.
 | `timeouts.mutating` | `60s` | Default timeout for service changes (at most 10m). |
 | `admin.token_sha256` | none | Optional. Allows the admin API over HTTP for the holder of this token. |
 | `agents.<name>.token_sha256` | — | One entry per agent. |
+| `agents.<name>.limits` | inherited | Overrides any of `calls_per_minute`, `burst`, `max_pending` for this agent. |
 | `providers.linux.enabled` | `true` | System, CPU, memory, GPU, storage, network tools. |
 | `providers.systemd.enabled` | `true` | Service tools. |
 | `providers.systemd.protected_units` | built-in list | Globs of units that can never be changed. The default covers dbus, `systemd-*`, polkit, ssh, sshd, `user@*` and `getty@*`. `sysrail.service` is always protected. |
@@ -314,6 +318,39 @@ buttons that approve anything.
 **Messages leave the host.** They contain the host name, agent, capability,
 resource and the agent's reason. Bot tokens, SMTP passwords and ntfy tokens
 are stored in `config.yaml`, which only root and the `sysrail` group can read.
+
+### Limits
+
+Each agent has a call budget, so one misbehaving agent cannot flood the
+daemon, the approval queue or the audit log:
+
+- **Call rate.** By default an agent may make 30 calls back to back, and
+  then about 2 per second (`limits.burst: 30`,
+  `limits.calls_per_minute: 120`). Every tool call counts, including
+  `request_get_status` polls. Calls over the limit fail with `RATE_LIMITED`
+  and a `retry_after_seconds` hint.
+- **Pending requests.** An agent can have at most 10 requests waiting for
+  approval (`limits.max_pending`). Further requests that need approval fail
+  with `RATE_LIMITED` until you approve or deny some, or they expire.
+  Retrying an existing request with its `idempotency_key` doesn't count.
+
+Raise or remove limits for a trusted automation agent, for example:
+
+```yaml
+agents:
+  monitor:
+    token_sha256: "..."
+    limits:
+      calls_per_minute: 600
+      burst: 100
+```
+
+`0` disables a limit. Changes need a restart.
+
+Rejected calls are audited without letting a flood fill the audit log. The
+first rejection is recorded in full. Further rejections of that agent within
+10 seconds are only counted, and a `rate_limit` summary records how many
+there were.
 
 ### Restarts and pending requests
 

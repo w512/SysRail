@@ -123,6 +123,11 @@ The three service-changing tools also accept:
 Results and errors are JSON objects. Agents never have to parse terminal
 output.
 
+Each agent has a call budget: by default 30 calls back to back, then about 2
+per second, and at most 10 requests waiting for approval. Calls over the
+budget fail with `RATE_LIMITED` and say when to retry. Administrators can
+change the limits per agent (see [install.md](install.md#limits)).
+
 ## Example: diagnosing a failed service
 
 This is what an agent does when asked "why is nginx down?" under the default
@@ -373,6 +378,7 @@ The `RESULT` column takes these values:
 | `duplicate` | A retry with an `idempotency_key` that was already used |
 | `approved` / `rejected` / `expired` | Outcome of a pending request |
 | `pruned` | Retention archived and removed old records (event `retention`) |
+| `rate_limited` | Refused by a per-agent limit. Within 10 seconds, only the first rejection is recorded; a `rate_limit` record summarizes the rest. |
 
 Each record also stores the session ID, the arguments with secrets redacted,
 and their SHA-256, the policy rule that decided, and the duration. If the
@@ -473,6 +479,7 @@ Errors always have this shape:
 | `INVALID_ARGUMENT` | 400 | Bad arguments; the message says which | After fixing |
 | `RESOURCE_NOT_FOUND` | 404 | Unknown unit, request or capability | No |
 | `CONFLICT` | 409 | Request already decided or expired, idempotency key reused, job canceled | No |
+| `RATE_LIMITED` | 429 | Too many calls (wait `details.retry_after_seconds`), or too many requests waiting for approval | Later |
 | `TIMEOUT` | 504 | The operation exceeded its timeout | Yes |
 | `PROVIDER_UNAVAILABLE` | 503 | systemd, journald or another source could not be reached | Yes |
 | `EXECUTION_FAILED` | 500 | The operation failed, e.g. a service failed to start; check its logs | Depends |
