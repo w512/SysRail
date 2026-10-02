@@ -13,7 +13,8 @@ append-only audit log.
 Status: Stage 1, generic Linux (`linux/amd64`, systemd).
 
 Documentation: [installation guide](docs/install.md) ·
-[usage guide](docs/usage.md) · [security model](docs/security.md).
+[usage guide](docs/usage.md) · [security model](docs/security.md) ·
+[development guide](docs/development.md).
 
 ## Tools
 
@@ -240,6 +241,10 @@ Code layout: `internal/core` holds the capability registry, policy, engine,
 audit, redaction and events. `internal/providers` holds `linux` and
 `systemd`, which must pass `providertest`. `internal/api` contains `httpapi`
 and the `mcpshim` stdio proxy. `cmd/sysrail` is the CLI.
+
+The [development guide](docs/development.md) explains the request pipeline,
+the test levels and the remote test machine, and how to add capabilities and
+providers.
 
 ## License
 
