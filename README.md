@@ -237,5 +237,7 @@ and the `mcpshim` stdio proxy. `cmd/sysrail` is the CLI.
 
 ## License
 
-Prosperity Public License 3.0.0: free for noncommercial use, with a free trial
-for commercial use.
+SysRail is licensed under the [Prosperity Public License 3.0.0](LICENSE.md). It
+is free for noncommercial use, and companies may try it for commercial
+purposes for thirty days. For a commercial license, contact Nick Blokhin
+<nick@blokhin.us>.
