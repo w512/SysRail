@@ -130,3 +130,45 @@ func TestRetention(t *testing.T) {
 	}
 	t.Fatal("no retention record after restart")
 }
+
+// TestRateLimit checks the per-agent call rate and the audit trail of
+// rejected calls.
+func TestRateLimit(t *testing.T) {
+	cs := connect(t, "e2e-ratelimit")
+	for range 3 {
+		mustCall(t, cs, "service_list", map[string]any{"limit": 1})
+	}
+	isErr, m := call(t, cs, "service_list", map[string]any{"limit": 1})
+	e, _ := m["error"].(map[string]any)
+	details, _ := e["details"].(map[string]any)
+	if !isErr || errorCode(m) != "RATE_LIMITED" || details["retry_after_seconds"] == nil || e["retryable"] != true {
+		t.Fatalf("fourth call within the burst of 3: %v", m)
+	}
+	for range 10 {
+		call(t, cs, "service_list", nil)
+	}
+	out := run(t, binary, "audit", "--json", "--agent", "e2e-ratelimit")
+	if n := strings.Count(out, `"result": "rate_limited"`); n != 1 {
+		t.Fatalf("a burst of rejected calls must leave one audit record, found %d:\n%s", n, out)
+	}
+}
+
+// TestMaxPending checks the cap on requests waiting for approval.
+func TestMaxPending(t *testing.T) {
+	cs := connect(t, "e2e-pending")
+	var ids []string
+	for range 2 {
+		ids = append(ids, mustCall(t, cs, "service_start", map[string]any{"name": "sysrail-test-dummy"})["request_id"].(string))
+	}
+	t.Cleanup(func() {
+		for _, id := range ids {
+			exec.Command(binary, "approvals", "deny", id).Run()
+		}
+	})
+	isErr, m := call(t, cs, "service_start", map[string]any{"name": "sysrail-test-dummy"})
+	if !isErr || errorCode(m) != "RATE_LIMITED" || !strings.Contains(m["error"].(map[string]any)["message"].(string), "waiting for approval") {
+		t.Fatalf("third pending request: %v", m)
+	}
+	run(t, binary, "approvals", "deny", ids[0], "--note", "make room")
+	ids = append(ids, mustCall(t, cs, "service_start", map[string]any{"name": "sysrail-test-dummy"})["request_id"].(string))
+}

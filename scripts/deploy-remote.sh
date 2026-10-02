@@ -28,7 +28,7 @@ cd $STAGE_DIR
 
 install -d -m 0700 /root/sysrail-e2e
 cfg=\$(cat deploy/test/config.yaml)
-for agent in e2e e2e-readonly; do
+for agent in e2e e2e-readonly e2e-ratelimit e2e-pending; do
 	out=\$(/usr/local/bin/sysrail token create)
 	awk '/^token:/{print \$2}' <<<"\$out" >/root/sysrail-e2e/\$agent.token
 	hash=\$(awk '/^token_sha256:/{print \$2}' <<<"\$out")

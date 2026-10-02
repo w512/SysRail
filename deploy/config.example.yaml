@@ -33,6 +33,13 @@ timeouts:
   read: 10s
   mutating: 60s
 
+# Per-agent limits; 0 disables a limit. Calls over the rate fail with
+# RATE_LIMITED (HTTP 429) and a retry_after_seconds hint.
+limits:
+  calls_per_minute: 120    # sustained rate across all tools
+  burst: 30                # calls allowed back to back
+  max_pending: 10          # requests waiting for approval at the same time
+
 # Optional: let holders of this token use the admin API over HTTP.
 # admin:
 #   token_sha256: ""
@@ -42,6 +49,9 @@ timeouts:
 agents:
   opencode:
     token_sha256: "0000000000000000000000000000000000000000000000000000000000000000"
+    # Optional per-agent overrides of the limits above:
+    # limits:
+    #   calls_per_minute: 600
 
 providers:
   linux:

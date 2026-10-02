@@ -9,3 +9,10 @@ agents:
         "sysrail-test-*.service": { start: ask, restart: ask }
   e2e-readonly:
     allow: [system.read, service.read]
+  e2e-ratelimit:
+    allow: [service.read]
+  e2e-pending:
+    allow: [service.read]
+    resources:
+      service:
+        "sysrail-test-*.service": { start: ask }

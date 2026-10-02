@@ -12,8 +12,21 @@ approvals:
 agents:
   e2e:
     token_sha256: "@E2E_HASH@"
+    limits:
+      calls_per_minute: 6000
+      burst: 1000
   e2e-readonly:
     token_sha256: "@E2E_READONLY_HASH@"
+  e2e-ratelimit:
+    token_sha256: "@E2E_RATELIMIT_HASH@"
+    limits:
+      calls_per_minute: 6
+      burst: 3
+  e2e-pending:
+    token_sha256: "@E2E_PENDING_HASH@"
+    limits:
+      calls_per_minute: 0
+      max_pending: 2
 # Local receivers started by test/e2e (TestNotifications).
 notifications:
   webhooks:
