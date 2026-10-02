@@ -37,21 +37,41 @@ execution tool, and the registry refuses to load one.
 ## Install
 
 Requirements: Linux on amd64 with systemd and polkit (JavaScript rules, e.g.
-Ubuntu 24.04).
+Ubuntu 24.04). Building needs `git`, `make` and Go 1.26 or newer. An older Go
+(1.21+) also works: it downloads the toolchain pinned in `go.mod`.
+
+### Option 1: build and install on the Linux host
 
 ```sh
+sudo apt install -y git make          # Debian/Ubuntu
+sudo snap install go --classic        # or install Go from https://go.dev/dl/
+git clone https://github.com/w512/SysRail.git
+cd SysRail
+make build-linux                      # build/linux-amd64/sysrail (static, no cgo)
+sudo ./deploy/install.sh build/linux-amd64/sysrail
+```
+
+### Option 2: build on another machine and copy it over
+
+This keeps Go off the server. The build works from macOS too.
+
+```sh
+git clone https://github.com/w512/SysRail.git
+cd SysRail
 make build-linux                      # build/linux-amd64/sysrail (static, no cgo)
 ssh host mkdir -p /tmp/sysrail
 scp -r build/linux-amd64/sysrail deploy host:/tmp/sysrail/
-ssh host 'cd /tmp/sysrail && sudo ./deploy/install.sh ./sysrail'
+ssh -t host 'cd /tmp/sysrail && sudo ./deploy/install.sh ./sysrail'
 ```
 
-`install.sh` creates the `sysrail` system user and the `sysrail-agents` group,
-installs the sandboxed `sysrail.service` and a polkit rule, writes
-`/etc/sysrail/config.yaml` and `policy.yaml` from the examples, and prints a
-token for an agent named `opencode` once. Existing configuration is never
-overwritten. Remove SysRail with `sudo ./deploy/uninstall.sh` (add `--purge`
-to delete configuration and the audit log).
+### After installing
+
+Either way, `install.sh` creates the `sysrail` system user and the
+`sysrail-agents` group, installs the sandboxed `sysrail.service` and a polkit
+rule, writes `/etc/sysrail/config.yaml` and `policy.yaml` from the examples,
+and prints a token for an agent named `opencode` once. Existing configuration
+is never overwritten. Remove SysRail with `sudo ./deploy/uninstall.sh` (add
+`--purge` to delete configuration and the audit log).
 
 Then:
 
