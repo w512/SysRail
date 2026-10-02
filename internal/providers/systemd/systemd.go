@@ -249,8 +249,7 @@ func (p *Provider) list(ctx context.Context, in listArgs) (any, error) {
 		if !strings.HasSuffix(u.Name, ".service") {
 			continue
 		}
-		out.Services = append(out.Services, serviceEntry{Name: u.Name, Description: u.Description,
-			LoadState: u.LoadState, ActiveState: u.ActiveState, SubState: u.SubState})
+		out.Services = append(out.Services, serviceEntry(u))
 	}
 	slices.SortFunc(out.Services, func(a, b serviceEntry) int { return strings.Compare(a.Name, b.Name) })
 	out.Total = len(out.Services)

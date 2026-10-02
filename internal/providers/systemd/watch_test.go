@@ -50,10 +50,10 @@ func TestWatchEmitsTransitions(t *testing.T) {
 
 	time.Sleep(30 * time.Millisecond) // baseline: nginx is already failed, no event
 	set("cron.service", "failed")
-	evs := wait(1)
+	wait(1)
 	set("cron.service", "active")
 	set("nginx.service", "active")
-	evs = wait(3)
+	evs := wait(3)
 	cancel()
 	<-done
 
