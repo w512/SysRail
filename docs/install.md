@@ -213,6 +213,135 @@ sudo sysrail policy check                # effective grants per agent
 sudo sysrail audit                       # recent calls (empty at first)
 ```
 
+## Operations
+
+### Logs and health
+
+The daemon logs JSON lines to the journal:
+
+```sh
+journalctl -u sysrail -f -o cat
+```
+
+Set `log.level: debug` in the config to also log every HTTP request. systemd
+restarts the daemon if it crashes (`Restart=on-failure`). For external
+monitoring, check `systemctl is-active sysrail` or `GET /v1/health`.
+
+### Watching for approval requests
+
+SysRail does not send notifications. A request that needs approval just waits
+until someone looks, and expires after `approvals.ttl`. To see pending
+requests:
+
+```sh
+sudo sysrail approvals list      # pending right now
+sudo sysrail audit --follow      # live; pending requests show up as approval_required
+```
+
+To be notified, subscribe to `request.pending` events on the admin socket and
+pass them to whatever alerting you use. This example writes them to the
+system log:
+
+```sh
+sudo curl -sN --unix-socket /run/sysrail/admin.sock \
+  "http://sysrail/v1/events?types=request.pending" |
+while IFS= read -r line; do
+  case "$line" in
+    data:*) logger -t sysrail-approval "${line#data: }" ;;
+  esac
+done
+```
+
+The event contains the agent, capability, resource and request ID. Think
+before forwarding it to an external service.
+
+### Restarts and pending requests
+
+- **Requests survive restarts.** They are stored in the database and keep
+  their original deadline. Agents can keep polling `request_get_status`, and
+  you can approve them after the restart.
+- **Stopping during a change.** When the daemon stops, it waits up to
+  15 seconds for calls that are still running. A change still running after
+  that is left in the `approved` state with no result. Check the service
+  itself and the audit log.
+- **Event history is in memory** and starts empty after a restart.
+- **Policy reloads don't touch pending requests.** The policy is checked
+  again when a request is approved.
+
+### Rotating an agent token
+
+1. Create a new token with `sysrail token create`.
+2. Replace the agent's `token_sha256` in `/etc/sysrail/config.yaml`.
+3. Restart: `sudo sysrail policy check && sudo systemctl restart sysrail`.
+   The old token stops working at this point.
+4. Put the new token in the agent's token file.
+
+The agent's identity is its name, not its token. Its pending requests and
+audit history carry over.
+
+### Backing up
+
+Back up `/etc/sysrail/`, `/etc/polkit-1/rules.d/50-sysrail.rules` and the
+database `/var/lib/sysrail/sysrail.db`.
+
+With the `sqlite3` tool installed (`sudo apt install sqlite3`), the database
+can be copied while the daemon runs:
+
+```sh
+sudo sqlite3 /var/lib/sysrail/sysrail.db ".backup '/var/backups/sysrail-$(date +%F).db'"
+```
+
+Without it, stop the daemon briefly. After a clean stop, the database is a
+single self-contained file:
+
+```sh
+sudo systemctl stop sysrail
+sudo cp -a /var/lib/sysrail/sysrail.db /var/backups/sysrail-$(date +%F).db
+sudo systemctl start sysrail
+```
+
+To restore a backup:
+
+```sh
+sudo systemctl stop sysrail
+sudo install -m 0600 -o sysrail -g sysrail /var/backups/sysrail-2026-10-01.db /var/lib/sysrail/sysrail.db
+sudo rm -f /var/lib/sysrail/sysrail.db-wal /var/lib/sysrail/sysrail.db-shm
+sudo systemctl start sysrail
+```
+
+### Exporting the audit log
+
+`sudo sysrail audit --json --limit 1000` prints the newest 1000 records. For
+a complete export, page through `GET /v1/audit` with `after_id`, as described
+in [api.md](api.md#get-v1audit). Alternatively, read the table directly; this
+is safe while the daemon runs:
+
+```sh
+sudo sqlite3 -readonly -json /var/lib/sysrail/sysrail.db \
+  "SELECT * FROM audit_log WHERE id > 0 ORDER BY id" > sysrail-audit.json
+```
+
+Increase `id > 0` to the last exported ID for incremental exports. The
+columns match the API fields, except that the time is in `ts`. Export
+regularly to another machine if you need an audit trail that root on this
+host cannot alter.
+
+### Audit log growth
+
+Every call adds two records (`request` and `result`) of roughly 270 bytes each,
+so about 0.5 KB per call: a million calls take around 500 MB. Nothing is
+deleted automatically, and the audit table refuses deletes. To start a fresh
+database, archive the old one:
+
+```sh
+sudo sysrail approvals list    # make sure nothing is pending; pending requests stay in the old file
+sudo systemctl stop sysrail
+sudo mv /var/lib/sysrail/sysrail.db /var/backups/sysrail-audit-$(date +%F).db
+sudo systemctl start sysrail   # creates a new, empty database
+```
+
+The archived file can still be read with `sqlite3 -readonly`.
+
 ## Upgrade
 
 Build the new version and run `install.sh` again with the new binary (either
