@@ -19,6 +19,12 @@ const (
 	ServiceRecovered = "service.recovered"
 )
 
+// Types lists every event type the daemon emits.
+var Types = []string{
+	RequestPending, RequestApproved, RequestDenied, RequestExpired, RequestExecuted, RequestFailed,
+	ServiceFailed, ServiceRecovered,
+}
+
 // Event is something that happened.
 type Event struct {
 	ID     int64     `json:"id"`
