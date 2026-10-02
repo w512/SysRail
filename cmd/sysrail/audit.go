@@ -69,6 +69,13 @@ func runAudit(args []string, stdout, stderr io.Writer) int {
 			if r.RequestID != "" && detail == "" {
 				detail = r.RequestID
 			}
+			if r.Note != "" {
+				if r.ErrorCode != "" {
+					detail = r.ErrorCode + ": " + r.ErrorMessage + "; " + r.Note
+				} else {
+					detail = r.Note
+				}
+			}
 			fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", r.ID, r.Time.Local().Format(time.DateTime),
 				r.Event, dash(r.Agent), dash(r.Capability), dash(r.Resource), dash(r.PolicyDecision), r.Result, detail)
 		}

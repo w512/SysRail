@@ -20,6 +20,15 @@ approvals:
   # Pending requests expire after this long.
   ttl: 15m
 
+audit:
+  # Audit records and finished requests older than this are removed from the
+  # database (checked at startup and hourly). 0 keeps everything.
+  retention_days: 90
+  # Write removed records to compressed JSON Lines files first.
+  archive: true
+  # Defaults to an "archive" directory next to the database.
+  # archive_dir: /var/lib/sysrail/archive
+
 timeouts:
   read: 10s
   mutating: 60s

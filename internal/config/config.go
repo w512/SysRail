@@ -26,6 +26,7 @@ type Config struct {
 	Database   string           `yaml:"database"`
 	PolicyFile string           `yaml:"policy_file"`
 	Approvals  Approvals        `yaml:"approvals"`
+	Audit      Audit            `yaml:"audit"`
 	Timeouts   Timeouts         `yaml:"timeouts"`
 	Admin      Admin            `yaml:"admin"`
 	Agents     map[string]Agent `yaml:"agents"`
@@ -50,6 +51,29 @@ type Server struct {
 // Approvals configures the approval flow.
 type Approvals struct {
 	TTL time.Duration `yaml:"ttl"`
+}
+
+// Audit configures audit log retention.
+type Audit struct {
+	// RetentionDays keeps audit records and finished requests this many
+	// days; 0 keeps them forever.
+	RetentionDays int `yaml:"retention_days"`
+	// Archive writes removed records to ArchiveDir as .jsonl.gz files.
+	Archive bool `yaml:"archive"`
+	// ArchiveDir defaults to an "archive" directory next to the database.
+	ArchiveDir string `yaml:"archive_dir"`
+}
+
+// ArchiveDirectory returns where retention writes archives, or "" when
+// archiving is disabled.
+func (c *Config) ArchiveDirectory() string {
+	if !c.Audit.Archive {
+		return ""
+	}
+	if c.Audit.ArchiveDir != "" {
+		return c.Audit.ArchiveDir
+	}
+	return filepath.Join(filepath.Dir(c.Database), "archive")
 }
 
 // Timeouts are default capability timeouts.
@@ -105,6 +129,7 @@ func Default() *Config {
 		Database:   "/var/lib/sysrail/sysrail.db",
 		PolicyFile: "/etc/sysrail/policy.yaml",
 		Approvals:  Approvals{TTL: 15 * time.Minute},
+		Audit:      Audit{RetentionDays: 90, Archive: true},
 		Timeouts:   Timeouts{Read: 10 * time.Second, Mutating: 60 * time.Second},
 		Providers:  Providers{Linux: Linux{Enabled: true}, Systemd: Systemd{Enabled: true}},
 		Log:        Log{Level: "info"},
@@ -129,7 +154,8 @@ func Load(path string) (*Config, error) {
 		return nil, fmt.Errorf("resolve config path: %w", err)
 	}
 	base := filepath.Dir(abs)
-	for _, p := range []*string{&cfg.Database, &cfg.PolicyFile, &cfg.Server.AgentSocket, &cfg.Server.AdminSocket} {
+	for _, p := range []*string{&cfg.Database, &cfg.PolicyFile, &cfg.Server.AgentSocket, &cfg.Server.AdminSocket,
+		&cfg.Audit.ArchiveDir} {
 		if *p != "" && !filepath.IsAbs(*p) {
 			*p = filepath.Join(base, *p)
 		}
@@ -171,6 +197,9 @@ func (c *Config) Validate() error {
 	}
 	if c.PolicyFile == "" {
 		fail("policy_file is required")
+	}
+	if c.Audit.RetentionDays < 0 || c.Audit.RetentionDays > 36500 {
+		fail("audit.retention_days must be between 0 (keep forever) and 36500")
 	}
 	if c.Approvals.TTL < time.Minute || c.Approvals.TTL > 24*time.Hour {
 		fail("approvals.ttl must be between 1m and 24h")

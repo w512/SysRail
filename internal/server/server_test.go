@@ -12,8 +12,10 @@ import (
 	"github.com/w512/SysRail/internal/auth"
 	"github.com/w512/SysRail/internal/client"
 	"github.com/w512/SysRail/internal/config"
+	"github.com/w512/SysRail/internal/core/audit"
 	"github.com/w512/SysRail/internal/providers"
 	"github.com/w512/SysRail/internal/providers/fake"
+	"github.com/w512/SysRail/internal/store/sqlite"
 )
 
 func shortDir(t *testing.T) string {
@@ -148,6 +150,55 @@ func TestDaemonRefusesToStartWithBadPolicy(t *testing.T) {
 			t.Errorf("%s: daemon started with an invalid policy", name)
 		}
 	}
+}
+
+func TestDaemonRunsRetentionAtStartup(t *testing.T) {
+	dir := shortDir(t)
+	_, hash, _ := auth.NewToken()
+	cfg := config.Default()
+	cfg.Server.HTTPListen = ""
+	cfg.Server.AgentSocket = filepath.Join(dir, "agent.sock")
+	cfg.Server.AdminSocket = filepath.Join(dir, "admin.sock")
+	cfg.Database = filepath.Join(dir, "sysrail.db")
+	cfg.PolicyFile = filepath.Join(dir, "policy.yaml")
+	cfg.Agents = map[string]config.Agent{"agent": {TokenSHA256: hash}}
+	cfg.Audit.RetentionDays = 30
+	os.WriteFile(cfg.PolicyFile, []byte("version: 1\nagents:\n  agent:\n    allow: [fake.read]\n"), 0o600)
+
+	seedStore, err := sqlite.Open(cfg.Database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	seedStore.Append(context.Background(), &audit.Record{Time: time.Now().AddDate(0, 0, -45),
+		Event: audit.EventRequest, Result: audit.ResultStarted, Agent: "agent"})
+	seedStore.Close()
+
+	d, err := New(cfg, func(*config.Config, *slog.Logger) ([]providers.Provider, error) {
+		return []providers.Provider{fake.New()}, nil
+	}, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+	defer func() { cancel(); <-done }()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		recs, _ := d.Engine().Audit(context.Background(), audit.Filter{})
+		if len(recs) == 1 && recs[0].Event == audit.EventRetention {
+			archives, _ := filepath.Glob(filepath.Join(dir, "archive", "audit-*.jsonl.gz"))
+			if len(archives) != 1 {
+				t.Fatalf("archives: %v", archives)
+			}
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	recs, _ := d.Engine().Audit(context.Background(), audit.Filter{})
+	t.Fatalf("old record was not pruned at startup: %+v", recs)
 }
 
 func TestListenUnixRefusesToReplaceRegularFile(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 	"github.com/w512/SysRail/internal/core/policy"
 	"github.com/w512/SysRail/internal/core/request"
 	"github.com/w512/SysRail/internal/providers"
+	"github.com/w512/SysRail/internal/retention"
 	"github.com/w512/SysRail/internal/store/sqlite"
 )
 
@@ -197,6 +198,16 @@ func (d *Daemon) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	watchCtx, stopWatchers := context.WithCancel(ctx)
 	defer stopWatchers()
+	if days := d.cfg.Audit.RetentionDays; days > 0 {
+		d.log.Info("audit retention enabled", "days", days, "archive", d.cfg.ArchiveDirectory())
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			retention.Loop(watchCtx, retention.Options{
+				Store: d.store, Days: days, ArchiveDir: d.cfg.ArchiveDirectory(), Log: d.log,
+			}, time.Hour)
+		}()
+	}
 	for _, p := range d.provs {
 		if src, ok := p.(providers.EventSource); ok {
 			d.log.Info("watching for events", "provider", p.Name())

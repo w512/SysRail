@@ -51,6 +51,9 @@ providers:
 	if cfg.AgentHashes()["opencode"] != hash || !cfg.AgentNames()["opencode"] {
 		t.Fatal("agents not loaded")
 	}
+	if cfg.Audit.RetentionDays != 90 || cfg.ArchiveDirectory() != filepath.Join(dir, "state", "archive") {
+		t.Fatalf("audit defaults: %+v %q", cfg.Audit, cfg.ArchiveDirectory())
+	}
 }
 
 func TestValidation(t *testing.T) {
@@ -67,6 +70,7 @@ func TestValidation(t *testing.T) {
 		{"agent hash", "agents:\n  a:\n    token_sha256: xyz\n", "64 lowercase hex"},
 		{"admin reuse", "admin:\n  token_sha256: " + h + "\nagents:\n  a:\n    token_sha256: " + h + "\n", "reuse the admin token"},
 		{"log level", "log:\n  level: loud\n", "log.level"},
+		{"retention", "audit:\n  retention_days: -1\n", "audit.retention_days"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -87,6 +91,21 @@ func TestRelativeConfigPathYieldsAbsolutePaths(t *testing.T) {
 	}
 	if !filepath.IsAbs(cfg.Database) {
 		t.Fatalf("database path %q is relative", cfg.Database)
+	}
+}
+
+func TestArchiveSettings(t *testing.T) {
+	path := write(t, "audit:\n  archive_dir: old-audit\n")
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ArchiveDirectory() != filepath.Join(filepath.Dir(path), "old-audit") {
+		t.Fatalf("archive dir: %q", cfg.ArchiveDirectory())
+	}
+	cfg.Audit.Archive = false
+	if cfg.ArchiveDirectory() != "" {
+		t.Fatal("disabled archiving must return an empty directory")
 	}
 }
 
