@@ -14,5 +14,21 @@ agents:
     token_sha256: "@E2E_HASH@"
   e2e-readonly:
     token_sha256: "@E2E_READONLY_HASH@"
+# Local receivers started by test/e2e (TestNotifications).
+notifications:
+  webhooks:
+    - url: http://127.0.0.1:19801/hook
+  ntfy:
+    - url: http://127.0.0.1:19802/sysrail-e2e
+  telegram:
+    - bot_token: "123:E2E"
+      chat_id: "42"
+      api_url: http://127.0.0.1:19803
+  email:
+    - smtp_host: 127.0.0.1
+      smtp_port: 19825
+      tls: none
+      from: SysRail <sysrail@test.invalid>
+      to: [admin@test.invalid]
 log:
   level: debug
