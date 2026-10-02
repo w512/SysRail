@@ -161,3 +161,24 @@ func TestRequestLifecycle(t *testing.T) {
 		t.Fatalf("nothing should be expired yet: %+v", none)
 	}
 }
+
+func TestCountPending(t *testing.T) {
+	s, _ := open(t)
+	ctx := context.Background()
+	now := time.Now()
+	for i, exp := range []time.Duration{time.Minute, time.Minute, -time.Minute} {
+		r := newRequest("req_"+string(rune('a'+i)), "")
+		e := now.Add(exp)
+		r.ExpiresAt = &e
+		s.CreateRequest(ctx, r)
+	}
+	done := newRequest("req_done", "")
+	done.Status = request.Executed
+	s.CreateRequest(ctx, done)
+	other := newRequest("req_other", "")
+	other.Agent = "someone-else"
+	s.CreateRequest(ctx, other)
+	if n, err := s.CountPending(ctx, "opencode", now); err != nil || n != 2 {
+		t.Fatalf("pending (not expired, not finished, own agent): %d %v", n, err)
+	}
+}

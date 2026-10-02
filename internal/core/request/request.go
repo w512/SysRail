@@ -103,4 +103,7 @@ type Store interface {
 	Transition(ctx context.Context, id string, from, to Status, u Update) error
 	// ExpiredPending returns pending requests whose expiry is before now.
 	ExpiredPending(ctx context.Context, now time.Time) ([]Request, error)
+	// CountPending counts an agent's pending requests that have not expired
+	// at now.
+	CountPending(ctx context.Context, agent string, now time.Time) (int, error)
 }

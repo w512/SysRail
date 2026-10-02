@@ -304,6 +304,15 @@ func (s *Store) ExpiredPending(ctx context.Context, now time.Time) ([]request.Re
 		string(request.Pending), formatTime(now))
 }
 
+// CountPending implements request.Store.
+func (s *Store) CountPending(ctx context.Context, agent string, now time.Time) (int, error) {
+	var n int
+	err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM requests
+		WHERE agent = ? AND status = ? AND (expires_at IS NULL OR expires_at > ?)`,
+		agent, string(request.Pending), formatTime(now)).Scan(&n)
+	return n, err
+}
+
 func (s *Store) queryRequests(ctx context.Context, q string, args ...any) ([]request.Request, error) {
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {

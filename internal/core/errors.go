@@ -20,6 +20,9 @@ const (
 	CodeExecutionFailed      Code = "EXECUTION_FAILED"
 	CodeTimeout              Code = "TIMEOUT"
 	CodeConflict             Code = "CONFLICT"
+	// CodeRateLimited means the agent exceeded a rate or pending-request
+	// limit. Details may carry retry_after_seconds.
+	CodeRateLimited Code = "RATE_LIMITED"
 )
 
 // HTTPStatus maps an error code to the HTTP status used by the API.
@@ -41,12 +44,14 @@ func (c Code) HTTPStatus() int {
 		return http.StatusGatewayTimeout
 	case CodeConflict:
 		return http.StatusConflict
+	case CodeRateLimited:
+		return http.StatusTooManyRequests
 	}
 	return http.StatusInternalServerError
 }
 
 func (c Code) retryable() bool {
-	return c == CodeProviderUnavailable || c == CodeTimeout
+	return c == CodeProviderUnavailable || c == CodeTimeout || c == CodeRateLimited
 }
 
 // Error is the structured error returned to agents and API clients.

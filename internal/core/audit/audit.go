@@ -17,6 +17,9 @@ const (
 	EventApproval = "approval"
 	// EventRetention records that old records were archived and removed.
 	EventRetention = "retention"
+	// EventRateLimit summarizes calls rejected by the rate limit that were
+	// not recorded individually.
+	EventRateLimit = "rate_limit"
 )
 
 // Result values.
@@ -32,6 +35,7 @@ const (
 	ResultRejected         = "rejected"
 	ResultExpired          = "expired"
 	ResultPruned           = "pruned"
+	ResultRateLimited      = "rate_limited"
 )
 
 // Record is one audit log entry. Arguments are redacted before persistence.
