@@ -52,6 +52,8 @@ type Options struct {
 	Now         func() time.Time
 	// Events receives request lifecycle events. Optional.
 	Events *events.Bus
+	// Limits returns the limits for an agent. Nil means unlimited.
+	Limits func(agent string) Limits
 }
 
 // Engine executes capability calls.
@@ -63,6 +65,9 @@ type Engine struct {
 	log    *slog.Logger
 	now    func() time.Time
 	events *events.Bus
+
+	limitsFor func(agent string) Limits
+	limits    limiters
 }
 
 // New builds an engine.
@@ -71,7 +76,7 @@ func New(opts Options) (*Engine, error) {
 		return nil, errors.New("engine: registry, policy and store are required")
 	}
 	e := &Engine{reg: opts.Registry, store: opts.Store, ttl: opts.ApprovalTTL, log: opts.Logger, now: opts.Now,
-		events: opts.Events}
+		events: opts.Events, limitsFor: opts.Limits}
 	if e.ttl <= 0 {
 		e.ttl = 15 * time.Minute
 	}
@@ -133,6 +138,9 @@ type Outcome struct {
 // Execute runs the full pipeline for one call. Errors are always *core.Error.
 func (e *Engine) Execute(ctx context.Context, call Call) (*Outcome, error) {
 	ctx = core.WithCaller(ctx, core.Caller{Agent: call.Agent, Session: call.Session})
+	if err := e.checkRate(ctx, call); err != nil {
+		return nil, err
+	}
 	rec := audit.Record{
 		Event: audit.EventRequest, Agent: call.Agent, Session: call.Session, Capability: call.Capability,
 	}
@@ -211,6 +219,16 @@ func (e *Engine) Execute(ctx context.Context, call Call) (*Outcome, error) {
 		return &Outcome{Status: StatusSuccess, Result: result}, nil
 	}
 
+	if decision.Action == policy.Ask {
+		e.limits.pendMu.Lock()
+		defer e.limits.pendMu.Unlock()
+		if lerr := e.checkPending(ctx, call.Agent); lerr != nil {
+			if lerr.Code == core.CodeRateLimited {
+				return reject(audit.ResultRateLimited, lerr)
+			}
+			return nil, lerr
+		}
+	}
 	now := e.now()
 	req := &request.Request{
 		ID: core.NewID("req"), Agent: call.Agent, Session: call.Session, Capability: c.ID,
