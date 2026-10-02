@@ -54,6 +54,19 @@ systemctl daemon-reload
 systemctl enable sysrail.service >/dev/null 2>&1
 systemctl restart sysrail.service
 
+# The unit is "active" as soon as the process starts; wait for the daemon to
+# listen so the admin commands work right after this script returns.
+admin_socket="$(awk '/^[[:space:]]*admin_socket:/{print $2}' "$ETC/config.yaml" | tr -d '"')"
+admin_socket="${admin_socket:-/run/sysrail/admin.sock}"
+for _ in $(seq 50); do
+	[ -S "$admin_socket" ] && break
+	sleep 0.1
+done
+if ! systemctl is-active --quiet sysrail.service || [ ! -S "$admin_socket" ]; then
+	echo "install.sh: sysrail did not start; see: journalctl -u sysrail" >&2
+	exit 1
+fi
+
 echo "SysRail $(/usr/local/bin/sysrail version | awk '{print $2}') is running."
 if [ -n "$new_token" ]; then
 	cat <<EOF
