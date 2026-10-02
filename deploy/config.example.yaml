@@ -53,5 +53,33 @@ providers:
     # user@*, getty@*). sysrail.service is always protected.
     # protected_units: ["dbus.service", "systemd-*.service", "ssh.service"]
 
+# Notifications about requests that need approval (and, optionally, other
+# events). Each channel takes "events"; the default is [request.pending].
+# Other events: request.approved, request.denied, request.expired,
+# request.executed, request.failed, service.failed, service.recovered.
+# Test with `sudo sysrail notify test`. Changes need a restart.
+notifications:
+  # ntfy (https://ntfy.sh or self-hosted): push notifications to a phone.
+  # ntfy:
+  #   - url: https://ntfy.sh/your-long-random-topic
+  #     token: ""                  # access token, if the topic is protected
+  #     events: [request.pending, service.failed]
+  # Telegram: create a bot with @BotFather and use your chat ID.
+  # telegram:
+  #   - bot_token: "123456789:AA..."
+  #     chat_id: "123456789"
+  # Email over SMTP (tls: starttls on 587, implicit on 465, or none without a password).
+  # email:
+  #   - smtp_host: smtp.example.com
+  #     smtp_port: 587
+  #     username: sysrail@example.com
+  #     password: "..."
+  #     from: SysRail <sysrail@example.com>
+  #     to: [admin@example.com]
+  # Webhook: POSTs a JSON message (title, text, event, request).
+  # webhooks:
+  #   - url: https://automation.example.com/hooks/sysrail
+  #     headers: {Authorization: "Bearer ..."}
+
 log:
   level: info

@@ -22,6 +22,7 @@ func commands() []command {
 		{"approvals", "list, show, approve or deny pending requests", runApprovals},
 		{"audit", "show the audit log", runAudit},
 		{"token", "create an agent token", runToken},
+		{"notify", "send a test message to every notification channel", runNotify},
 		{"policy", "validate the policy and show effective grants", runPolicy},
 		{"version", "print version", runVersion},
 	}

@@ -2,10 +2,13 @@ package server
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,6 +16,7 @@ import (
 	"github.com/w512/SysRail/internal/client"
 	"github.com/w512/SysRail/internal/config"
 	"github.com/w512/SysRail/internal/core/audit"
+	"github.com/w512/SysRail/internal/notify"
 	"github.com/w512/SysRail/internal/providers"
 	"github.com/w512/SysRail/internal/providers/fake"
 	"github.com/w512/SysRail/internal/store/sqlite"
@@ -199,6 +203,61 @@ func TestDaemonRunsRetentionAtStartup(t *testing.T) {
 	}
 	recs, _ := d.Engine().Audit(context.Background(), audit.Filter{})
 	t.Fatalf("old record was not pruned at startup: %+v", recs)
+}
+
+func TestDaemonNotifiesAboutPendingRequests(t *testing.T) {
+	got := make(chan notify.Message, 4)
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var m notify.Message
+		json.NewDecoder(r.Body).Decode(&m)
+		got <- m
+	}))
+	defer hook.Close()
+
+	dir := shortDir(t)
+	token, hash, _ := auth.NewToken()
+	cfg := config.Default()
+	cfg.Server.HTTPListen = ""
+	cfg.Server.AgentSocket = filepath.Join(dir, "agent.sock")
+	cfg.Server.AdminSocket = filepath.Join(dir, "admin.sock")
+	cfg.Database = filepath.Join(dir, "sysrail.db")
+	cfg.PolicyFile = filepath.Join(dir, "policy.yaml")
+	cfg.Agents = map[string]config.Agent{"agent": {TokenSHA256: hash}}
+	cfg.Notifications.Webhooks = []config.WebhookNotification{{URL: hook.URL}}
+	os.WriteFile(cfg.PolicyFile, []byte("version: 1\nagents:\n  agent:\n    ask: [fake.restart]\n"), 0o600)
+
+	d, err := New(cfg, func(*config.Config, *slog.Logger) ([]providers.Provider, error) {
+		return []providers.Provider{fake.New()}, nil
+	}, slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- d.Run(ctx) }()
+	defer func() { cancel(); <-done }()
+
+	agent, _ := client.New(cfg.Server.AgentSocket, token)
+	agent.Wait(ctx, 5*time.Second)
+	var out struct {
+		RequestID string `json:"request_id"`
+	}
+	if _, err := agent.Do(ctx, http.MethodPost, "/v1/execute", map[string]any{
+		"capability": "fake.restart", "arguments": map[string]string{"name": "w"}, "reason": "stuck",
+	}, &out); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case m := <-got:
+		if m.Type != "request.pending" || m.Request == nil || m.Request.ID != out.RequestID ||
+			m.Request.Reason != "stuck" || m.Request.Impact != "The widget is briefly unavailable." ||
+			!strings.Contains(m.Text, "sudo sysrail approvals approve "+out.RequestID) {
+			t.Fatalf("notification: %+v", m)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("no notification for a pending request")
+	}
 }
 
 func TestListenUnixRefusesToReplaceRegularFile(t *testing.T) {

@@ -2,6 +2,11 @@ package main
 
 import (
 	"bytes"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -27,5 +32,26 @@ func TestReasonLineIsSanitized(t *testing.T) {
 	got := reasonLine("restart\x1b[2Jnow\n")
 	if strings.ContainsAny(got, "\x1b\n") || !strings.Contains(got, "unverified") {
 		t.Fatalf("got %q", got)
+	}
+}
+
+func TestNotifyTest(t *testing.T) {
+	received := make(chan string, 1)
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		received <- string(b)
+	}))
+	defer hook.Close()
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	os.WriteFile(cfgPath, []byte("notifications:\n  webhooks:\n    - url: "+hook.URL+"\n  ntfy:\n    - url: http://127.0.0.1:1/topic\n"), 0o600)
+
+	var out, errOut bytes.Buffer
+	code := run([]string{"notify", "test", "--config", cfgPath}, &out, &errOut)
+	if code != 1 || !strings.Contains(out.String(), "ok    webhook "+hook.URL) || !strings.Contains(out.String(), "FAIL  ntfy http://127.0.0.1:1/topic") {
+		t.Fatalf("exit %d:\n%s%s", code, out.String(), errOut.String())
+	}
+	if body := <-received; !strings.Contains(body, "test notification") {
+		t.Fatalf("webhook body: %s", body)
 	}
 }

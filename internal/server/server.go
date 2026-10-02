@@ -24,6 +24,7 @@ import (
 	"github.com/w512/SysRail/internal/core/events"
 	"github.com/w512/SysRail/internal/core/policy"
 	"github.com/w512/SysRail/internal/core/request"
+	"github.com/w512/SysRail/internal/notify"
 	"github.com/w512/SysRail/internal/providers"
 	"github.com/w512/SysRail/internal/retention"
 	"github.com/w512/SysRail/internal/store/sqlite"
@@ -66,6 +67,7 @@ type Daemon struct {
 	authn  *auth.Authenticator
 	provs  []providers.Provider
 	bus    *events.Bus
+	notify *notify.Notifier
 }
 
 // New builds a daemon from cfg.
@@ -111,7 +113,20 @@ func (d *Daemon) init() error {
 		Registry: reg, Policy: pol, Store: d.store, ApprovalTTL: d.cfg.Approvals.TTL, Logger: d.log,
 		Events: d.bus,
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	host := Hostname()
+	d.notify = notify.New(notify.Options{
+		Channels: NotificationChannels(d.cfg, host), Host: host, Lookup: d.store.GetRequest, Log: d.log,
+		Impact: func(id string) string {
+			if c, ok := reg.ByID(id); ok {
+				return c.Impact
+			}
+			return ""
+		},
+	})
+	return nil
 }
 
 // Engine returns the daemon's engine.
@@ -198,6 +213,16 @@ func (d *Daemon) Run(ctx context.Context) error {
 	var wg sync.WaitGroup
 	watchCtx, stopWatchers := context.WithCancel(ctx)
 	defer stopWatchers()
+	if chans := d.notify.Channels(); len(chans) > 0 {
+		for _, c := range chans {
+			d.log.Info("notifications enabled", "channel", c.Name())
+		}
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			d.notify.Run(watchCtx, d.bus)
+		}()
+	}
 	if days := d.cfg.Audit.RetentionDays; days > 0 {
 		d.log.Info("audit retention enabled", "days", days, "archive", d.cfg.ArchiveDirectory())
 		wg.Add(1)
