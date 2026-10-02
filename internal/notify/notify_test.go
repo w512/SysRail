@@ -305,6 +305,33 @@ func TestRunDispatchesWithRetries(t *testing.T) {
 	}
 }
 
+func TestFailingMessageDoesNotDelayNewerOnes(t *testing.T) {
+	c := &fakeChannel{subscription: newSubscription(nil), name: "c", fail: 1}
+	n := testNotifier(c)
+	n.o.Retry = []time.Duration{time.Hour} // the retry of the first message never happens in this test
+	bus := events.NewBus(10)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { n.Run(ctx, bus); close(done) }()
+	time.Sleep(20 * time.Millisecond)
+	bus.Publish(pendingEvent)
+	second := pendingEvent
+	second.Resource = "second.service"
+	bus.Publish(second)
+	deadline := time.Now().Add(time.Second)
+	for time.Now().Before(deadline) {
+		if _, got := c.snapshot(); len(got) == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	<-done
+	if calls, got := c.snapshot(); calls != 2 || len(got) != 1 || got[0].Event.Resource != "second.service" {
+		t.Fatalf("calls %d, delivered %+v: the second message must not wait for the first one's retry", calls, got)
+	}
+}
+
 func TestTestSendsToEveryChannel(t *testing.T) {
 	ok := &fakeChannel{subscription: newSubscription(nil), name: "ok"}
 	bad := &fakeChannel{subscription: newSubscription(nil), name: "bad", fail: 5}

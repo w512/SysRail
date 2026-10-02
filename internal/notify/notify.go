@@ -102,21 +102,32 @@ func New(o Options) *Notifier {
 // Channels returns the configured channels.
 func (n *Notifier) Channels() []Channel { return n.o.Channels }
 
+type delivery struct {
+	m       *Message
+	attempt int
+}
+
 // Run delivers events from bus until ctx is canceled. Each channel has its
-// own queue, so a slow or failing destination does not delay the others.
+// own queue, and retries wait on a timer rather than in the queue, so a slow
+// or failing destination never delays newer messages.
 func (n *Notifier) Run(ctx context.Context, bus *events.Bus) {
 	if len(n.o.Channels) == 0 {
 		return
 	}
-	queues := make([]chan *Message, len(n.o.Channels))
+	queues := make([]chan delivery, len(n.o.Channels))
 	var wg sync.WaitGroup
 	for i, c := range n.o.Channels {
-		queues[i] = make(chan *Message, 100)
+		queues[i] = make(chan delivery, 100)
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for m := range queues[i] {
-				n.deliver(ctx, c, m)
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case d := <-queues[i]:
+					n.deliver(ctx, c, queues[i], d)
+				}
 			}
 		}()
 	}
@@ -130,9 +141,6 @@ func (n *Notifier) Run(ctx context.Context, bus *events.Bus) {
 	})
 	defer func() {
 		cancel()
-		for _, q := range queues {
-			close(q)
-		}
 		wg.Wait()
 	}()
 	for {
@@ -142,42 +150,46 @@ func (n *Notifier) Run(ctx context.Context, bus *events.Bus) {
 		case e := <-ch:
 			m := n.Build(ctx, e)
 			for i, c := range n.o.Channels {
-				if !c.Wants(e.Type) {
-					continue
-				}
-				select {
-				case queues[i] <- m:
-				default:
-					n.o.Log.Warn("notification queue full; dropping message", "channel", c.Name(), "event", e.Type)
+				if c.Wants(e.Type) {
+					n.enqueue(c, queues[i], delivery{m: m})
 				}
 			}
 		}
 	}
 }
 
-func (n *Notifier) deliver(ctx context.Context, c Channel, m *Message) {
-	for attempt := 0; ; attempt++ {
-		actx, cancel := context.WithTimeout(ctx, n.o.Timeout)
-		err := c.Send(actx, m)
-		cancel()
-		if err == nil {
-			n.o.Log.Debug("notification sent", "channel", c.Name(), "event", m.Type)
-			return
-		}
-		if ctx.Err() != nil {
-			return
-		}
-		if !isRetryable(err) || attempt >= len(n.o.Retry) {
-			n.o.Log.Warn("notification failed", "channel", c.Name(), "event", m.Type,
-				"attempts", attempt+1, "error", cleanErr(err).Error())
-			return
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-time.After(n.o.Retry[attempt]):
-		}
+func (n *Notifier) enqueue(c Channel, q chan delivery, d delivery) {
+	select {
+	case q <- d:
+	default:
+		n.o.Log.Warn("notification queue full; dropping message", "channel", c.Name(), "event", d.m.Type)
 	}
+}
+
+// deliver makes one attempt and schedules a retry on failure. Queues are
+// never closed, so a late retry after shutdown is simply ignored.
+func (n *Notifier) deliver(ctx context.Context, c Channel, q chan delivery, d delivery) {
+	actx, cancel := context.WithTimeout(ctx, n.o.Timeout)
+	err := c.Send(actx, d.m)
+	cancel()
+	if err == nil {
+		n.o.Log.Debug("notification sent", "channel", c.Name(), "event", d.m.Type)
+		return
+	}
+	if ctx.Err() != nil {
+		return
+	}
+	if !isRetryable(err) || d.attempt >= len(n.o.Retry) {
+		n.o.Log.Warn("notification failed", "channel", c.Name(), "event", d.m.Type,
+			"attempts", d.attempt+1, "error", cleanErr(err).Error())
+		return
+	}
+	next := delivery{m: d.m, attempt: d.attempt + 1}
+	time.AfterFunc(n.o.Retry[d.attempt], func() {
+		if ctx.Err() == nil {
+			n.enqueue(c, q, next)
+		}
+	})
 }
 
 // TestResult is the outcome of sending a test message to one channel.
