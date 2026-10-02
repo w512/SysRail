@@ -166,3 +166,14 @@ func TestNotificationsValidation(t *testing.T) {
 		})
 	}
 }
+
+// install.sh copies the example config verbatim on first install.
+func TestExampleConfigLoads(t *testing.T) {
+	cfg, err := Load("../../deploy/config.example.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Audit.RetentionDays != 90 || cfg.ArchiveDirectory() != "/var/lib/sysrail/archive" {
+		t.Fatalf("example audit settings: %+v", cfg.Audit)
+	}
+}
