@@ -13,8 +13,8 @@ append-only audit log.
 Status: Stage 1, generic Linux (`linux/amd64`, systemd).
 
 Documentation: [installation guide](docs/install.md) ·
-[usage guide](docs/usage.md) · [security model](docs/security.md) ·
-[development guide](docs/development.md).
+[usage guide](docs/usage.md) · [HTTP API reference](docs/api.md) ·
+[security model](docs/security.md) · [development guide](docs/development.md).
 
 ## Tools
 

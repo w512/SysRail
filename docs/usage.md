@@ -414,7 +414,8 @@ header (or `?since=<id>`) to receive what you missed.
 
 Everything the MCP proxy does is also available over HTTP. The agent API
 listens on `127.0.0.1:9487` and `/run/sysrail/agent.sock`, and needs
-`Authorization: Bearer <token>`.
+`Authorization: Bearer <token>`. Every endpoint, field and status code is
+listed in the [HTTP API reference](api.md).
 
 ```sh
 T=$(cat ~/.config/sysrail/token)
