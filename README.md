@@ -8,13 +8,7 @@ instead of `execute("…")`. Every call is checked against a policy, sensitive
 actions wait for a human to approve them, and everything is recorded in an
 append-only audit log.
 
-```text
-AI agent ──MCP (stdio)──▶ sysrail mcp ──Unix socket──▶ sysrail daemon
-                                                        ├─ policy (allow / ask / deny)
-                                                        ├─ approvals (CLI)
-                                                        ├─ audit log (SQLite)
-                                                        └─ providers ─▶ /proc, /sys, systemd (D-Bus), journald
-```
+![SysRail architecture: an AI agent talks MCP over stdio to the unprivileged sysrail mcp proxy, which forwards calls over a Unix socket to the sandboxed sysrail daemon. The daemon checks policy, waits for an administrator's approval when needed, audits every call before it runs, and uses providers to read /proc and /sys, manage systemd over D-Bus through polkit, read journald and query GPUs.](docs/architecture.svg)
 
 Status: Stage 1, generic Linux (`linux/amd64`, systemd).
 
