@@ -12,6 +12,9 @@ append-only audit log.
 
 Status: Stage 1, generic Linux (`linux/amd64`, systemd).
 
+Documentation: [installation guide](docs/install.md) ·
+[usage guide](docs/usage.md).
+
 ## Tools
 
 | Tool | What it does | Permission | Risk |
@@ -39,6 +42,9 @@ execution tool, and the registry refuses to load one.
 Requirements: Linux on amd64 with systemd and polkit (JavaScript rules, e.g.
 Ubuntu 24.04). Building needs `git`, `make` and Go 1.26 or newer. An older Go
 (1.21+) also works: it downloads the toolchain pinned in `go.mod`.
+
+The [installation guide](docs/install.md) covers configuration, adding agents,
+upgrades and troubleshooting in detail.
 
 ### Option 1: build and install on the Linux host
 
@@ -115,7 +121,8 @@ claude mcp add sysrail -e SYSRAIL_TOKEN=sysrail_… -- sysrail mcp
 
 `sysrail mcp` connects to `unix:///run/sysrail/agent.sock` by default. Use
 `--url http://127.0.0.1:9487` for TCP and `--token-file` to keep the token out
-of the environment.
+of the environment. The [usage guide](docs/usage.md) covers agents on another
+machine, the tools, policies, approvals, the audit log and the HTTP API.
 
 ## Policy
 
