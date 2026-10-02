@@ -193,6 +193,9 @@ resolved against the file's directory.
 | `database` | `/var/lib/sysrail/sysrail.db` | SQLite file for the audit log and requests. |
 | `policy_file` | `/etc/sysrail/policy.yaml` | |
 | `approvals.ttl` | `15m` | How long a request waits for approval (1m to 24h). |
+| `audit.retention_days` | `90` | Days to keep audit records and finished requests (checked at startup and hourly). `0` keeps everything. See [Audit retention](#audit-retention). |
+| `audit.archive` | `true` | Write removed records to compressed archives first. |
+| `audit.archive_dir` | `archive` next to the database | Where archives are written. |
 | `timeouts.read` | `10s` | Default timeout for read tools (at most 10m). |
 | `timeouts.mutating` | `60s` | Default timeout for service changes (at most 10m). |
 | `admin.token_sha256` | none | Optional. Allows the admin API over HTTP for the holder of this token. |
@@ -200,6 +203,10 @@ resolved against the file's directory.
 | `providers.linux.enabled` | `true` | System, CPU, memory, GPU, storage, network tools. |
 | `providers.systemd.enabled` | `true` | Service tools. |
 | `providers.systemd.protected_units` | built-in list | Globs of units that can never be changed. The default covers dbus, `systemd-*`, polkit, ssh, sshd, `user@*` and `getty@*`. `sysrail.service` is always protected. |
+| `notifications.ntfy` | none | List of `url` (topic URL), `token`, `events`. See [Notifications](#notifications). |
+| `notifications.telegram` | none | List of `bot_token`, `chat_id`, `api_url`, `events`. |
+| `notifications.email` | none | List of `smtp_host`, `smtp_port` (587, or 465 with implicit TLS), `tls` (`starttls`, `implicit`, `none`), `username`, `password`, `from`, `to`, `events`. |
+| `notifications.webhooks` | none | List of `url`, `headers`, `events`. |
 | `log.level` | `info` | `debug`, `info`, `warn` or `error`. Logs go to the journal. |
 
 Changes to `config.yaml` take effect after `sudo systemctl restart sysrail`.
@@ -227,33 +234,86 @@ Set `log.level: debug` in the config to also log every HTTP request. systemd
 restarts the daemon if it crashes (`Restart=on-failure`). For external
 monitoring, check `systemctl is-active sysrail` or `GET /v1/health`.
 
-### Watching for approval requests
+### Notifications
 
-SysRail does not send notifications. A request that needs approval just waits
-until someone looks, and expires after `approvals.ttl`. To see pending
-requests:
+SysRail announces requests that need approval through ntfy, Telegram, email
+and webhooks. It can also announce other events. Without notifications, a
+request just waits until someone runs `sudo sysrail approvals list`, and
+expires after `approvals.ttl`.
 
-```sh
-sudo sysrail approvals list      # pending right now
-sudo sysrail audit --follow      # live; pending requests show up as approval_required
+Configure channels under `notifications`, restart, and send a test message:
+
+```yaml
+notifications:
+  ntfy:
+    - url: https://ntfy.sh/sysrail-3f9c2a7d8e     # a long, unguessable topic
+  telegram:
+    - bot_token: "123456789:AA..."
+      chat_id: "123456789"
+  email:
+    - smtp_host: smtp.example.com
+      username: sysrail@example.com
+      password: "..."
+      from: SysRail <sysrail@example.com>
+      to: [admin@example.com]
+  webhooks:
+    - url: https://automation.example.com/hooks/sysrail
+      headers: {Authorization: "Bearer ..."}
 ```
 
-To be notified, subscribe to `request.pending` events on the admin socket and
-pass them to whatever alerting you use. This example writes them to the
-system log:
-
 ```sh
-sudo curl -sN --unix-socket /run/sysrail/admin.sock \
-  "http://sysrail/v1/events?types=request.pending" |
-while IFS= read -r line; do
-  case "$line" in
-    data:*) logger -t sysrail-approval "${line#data: }" ;;
-  esac
-done
+sudo systemctl restart sysrail
+sudo sysrail notify test        # one test message per channel; reports failures
 ```
 
-The event contains the agent, capability, resource and request ID. Think
-before forwarding it to an external service.
+A request that needs approval is announced like this:
+
+```text
+SysRail: approval needed on web1
+
+opencode requests service.restart on nginx.service (risk: low).
+Impact: Stops and starts the service again; its clients see a brief interruption.
+Reason (from the agent, unverified): port 80 is free again
+Expires: 2026-10-02 21:15:00 CEST
+
+Approve: sudo sysrail approvals approve req_01M3YQHXHVNE03F458XMJQ3ANN
+Deny:    sudo sysrail approvals deny req_01M3YQHXHVNE03F458XMJQ3ANN
+```
+
+**Events.** Each channel takes an `events` list. The default is
+`[request.pending]`. The others are `request.approved`, `request.denied`,
+`request.expired`, `request.executed`, `request.failed`, `service.failed` and
+`service.recovered`, for example `events: [request.pending, service.failed]`.
+
+**Channels:**
+
+- **ntfy.** Anyone who knows the name of a topic on the public ntfy.sh can
+  read it. Use a long random topic, an access token (`token`) or a
+  self-hosted server. Pending requests and failures are sent with high
+  priority.
+- **Telegram.** Create a bot with @BotFather and send it a message. Your chat
+  ID is then shown by `https://api.telegram.org/bot<token>/getUpdates`. Group
+  chat IDs are negative.
+- **Email.** STARTTLS on port 587 is the default. Use `tls: implicit` for
+  port 465. `tls: none` is allowed only without a username and password, for
+  example for a local relay.
+- **Webhooks** receive a JSON message, described in
+  [api.md](api.md#notification-webhook-payload).
+
+**Delivery:**
+
+- Delivery runs in the background and never slows down agents.
+- Network errors, HTTP 429 and 5xx, and temporary SMTP errors are retried
+  after 2, 10 and 30 seconds, without delaying newer messages.
+- A message that still fails is logged as `notification failed` in
+  `journalctl -u sysrail`.
+
+**Approval still happens only on the server.** Messages contain no links or
+buttons that approve anything.
+
+**Messages leave the host.** They contain the host name, agent, capability,
+resource and the agent's reason. Bot tokens, SMTP passwords and ntfy tokens
+are stored in `config.yaml`, which only root and the `sysrail` group can read.
 
 ### Restarts and pending requests
 
@@ -281,8 +341,9 @@ audit history carry over.
 
 ### Backing up
 
-Back up `/etc/sysrail/`, `/etc/polkit-1/rules.d/50-sysrail.rules` and the
-database `/var/lib/sysrail/sysrail.db`.
+Back up `/etc/sysrail/`, `/etc/polkit-1/rules.d/50-sysrail.rules`, the
+database `/var/lib/sysrail/sysrail.db` and the audit archives in
+`/var/lib/sysrail/archive/`.
 
 With the `sqlite3` tool installed (`sudo apt install sqlite3`), the database
 can be copied while the daemon runs:
@@ -322,25 +383,56 @@ sudo sqlite3 -readonly -json /var/lib/sysrail/sysrail.db \
 ```
 
 Increase `id > 0` to the last exported ID for incremental exports. The
-columns match the API fields, except that the time is in `ts`. Export
+columns match the API fields, except that the time is in `ts`. Records older
+than the retention period are no longer in the database: they are in the
+archives. Export
 regularly to another machine if you need an audit trail that root on this
 host cannot alter.
 
-### Audit log growth
+### Audit retention
 
-Every call adds two records (`request` and `result`) of roughly 270 bytes each,
-so about 0.5 KB per call: a million calls take around 500 MB. Nothing is
-deleted automatically, and the audit table refuses deletes. To start a fresh
-database, archive the old one:
+By default, audit records and finished requests older than 90 days are
+removed, at startup and then every hour.
 
-```sh
-sudo sysrail approvals list    # make sure nothing is pending; pending requests stay in the old file
-sudo systemctl stop sysrail
-sudo mv /var/lib/sysrail/sysrail.db /var/backups/sysrail-audit-$(date +%F).db
-sudo systemctl start sysrail   # creates a new, empty database
+Before removal, they are written to compressed JSON Lines files in
+`/var/lib/sysrail/archive`: one file per batch, mode 0600. The removal
+itself is recorded as a `retention` record:
+
+```text
+$ sudo sysrail audit --limit 1
+ID   TIME                 EVENT      AGENT  CAPABILITY  RESOURCE  DECISION  RESULT  DETAIL
+812  2026-10-02 12:00:00  retention  -      -           -         -         pruned  removed 2450 audit records and 31 finished requests older than 2026-07-04T12:00:00Z; archived to /var/lib/sysrail/archive/audit-20261002T120000Z-001.jsonl.gz
 ```
 
-The archived file can still be read with `sqlite3 -readonly`.
+To read an archive:
+
+```sh
+sudo zcat /var/lib/sysrail/archive/audit-*.jsonl.gz | head
+```
+
+Each line is either `{"type": "audit", "record": {...}}`, with the same fields
+as `GET /v1/audit`, or `{"type": "request", "request": {...}}`, with the
+arguments redacted.
+
+**Settings:**
+
+- `audit.retention_days` sets the period; `0` keeps everything.
+- `audit.archive: false` deletes old records without writing archives.
+- `audit.archive_dir` moves the archives elsewhere. The default location is
+  inside the service's writable state directory; another path may need a
+  `ReadWritePaths=` drop-in.
+- Pending and running requests are never removed.
+- SysRail never deletes the archives. Move them off the host or delete them
+  according to your own rules.
+
+**Size.** Every call adds two records of roughly 270 bytes each, so about
+0.5 KB per call. SQLite reuses the space that retention frees, so the file
+stops growing but does not shrink. To shrink it once, stop the daemon and run
+`sudo sqlite3 /var/lib/sysrail/sysrail.db VACUUM`.
+
+**Starting over.** To start a fresh database without waiting for retention,
+stop the daemon, move `sysrail.db` away, and start it again. Requests still
+pending stay in the old file.
 
 ## Upgrade
 
@@ -363,6 +455,12 @@ sudo ./deploy/uninstall.sh --purge   # also deletes config, audit log, user and 
 ```
 
 ## Troubleshooting
+
+**Notifications don't arrive.** Run `sudo sysrail notify test`, which reports
+the error for each channel. Common causes are a wrong chat ID or bot token, an
+SMTP server that requires `tls: implicit`, and a firewall blocking outbound
+connections. Delivery errors from the daemon appear as `notification failed`
+in `journalctl -u sysrail`.
 
 **The service does not start.** Look at `journalctl -u sysrail -n 50`. The
 most common cause is an invalid configuration or policy: an unknown key, a

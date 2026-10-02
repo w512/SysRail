@@ -69,8 +69,9 @@ meant to be sufficient on its own.
    1 MiB, log output to 256 KiB, and list results to fixed maximums.
 10. **Audit.** Every call is written to the audit log before anything runs,
     including reads, refusals and invalid calls. If the record cannot be
-    written, the call is refused. The audit table rejects updates and
-    deletes.
+    written, the call is refused. The audit table rejects updates. Deletes
+    happen only through retention, which writes the records to an archive
+    first and then logs a `retention` record of what it removed.
 11. **Redaction.** Before results, logs and audited arguments leave the
     daemon, SysRail masks passwords, tokens, API keys, private keys, JWTs,
     credentials in URLs and similar values.
@@ -103,8 +104,9 @@ Don't rely on redaction for services that log sensitive data; deny
 `logs.read` for them instead.
 
 **Root and the `sysrail` user.** Root on the host can do anything, including
-editing the audit database: the append-only rule protects against SysRail
-bugs, not against root. Anyone who controls the `sysrail` user can do what
+editing the audit database and the retention archives, which are ordinary
+files under `/var/lib/sysrail`. The append-only rule protects against
+SysRail bugs, not against root. Anyone who controls the `sysrail` user can do what
 the polkit rule allows. To make the audit trail tamper-evident, export it
 off the host regularly (`sysrail audit --json`).
 
@@ -119,8 +121,17 @@ If you enable `admin.token_sha256`, whoever holds that token can approve
 requests over HTTP, so keep it away from anything an agent can reach.
 
 **Resource exhaustion.** There is no rate limiting. A misbehaving agent can
-fill the approval queue and grow the audit database, which has no automatic
-retention yet.
+fill the approval queue and make the audit database grow quickly between
+retention runs.
+
+**Notifications leave the host.** Notification messages contain the host
+name, agent, capability, resource and the agent's reason. They go to
+whichever service you configure: ntfy, Telegram, an email provider, or a
+webhook. Anyone who knows the name of a topic on the public ntfy.sh can read
+it. Treat the reason in a message as untrusted text, just like at approval;
+messages never approve anything themselves. Channel credentials (bot tokens,
+SMTP passwords) are stored in `config.yaml`, readable by root and the
+`sysrail` group.
 
 **Configuration.** The protection is only as narrow as your policy, polkit
 rule and protected-unit list. A restart that SysRail allows can still harm a
@@ -141,7 +152,10 @@ runs to completion within its timeout, even if the agent disconnects.
 - Keep the polkit rule as narrow as the policy, and list services explicitly.
 - Deny `logs.read` for services whose logs contain secrets or personal data.
 - Keep the HTTP API on loopback. Use SSH to reach it from elsewhere.
-- Watch for pending requests (`sudo sysrail approvals list`, or
-  `sysrail audit --follow`) and review the audit log regularly.
+- Configure notifications, so requests are seen before they expire. Prefer a
+  self-hosted ntfy or another private channel. Review the audit log
+  regularly.
+- Copy audit exports and retention archives off the host if you need a trail
+  that root on the server cannot alter.
 - Keep SysRail up to date. The build pins a patched Go toolchain, and
   dependencies are checked with govulncheck (`make vulncheck`).

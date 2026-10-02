@@ -331,6 +331,10 @@ Things to know:
   example `uid=0(root) via alice`.
 - **For scripts,** `--json` prints machine-readable output and
   `SYSRAIL_ADMIN_SOCKET` or `--socket` selects a different admin socket.
+- **To hear about new requests** without watching the server, configure
+  notifications through ntfy, Telegram, email or a webhook (see
+  [install.md](install.md#notifications)). Each message contains the approve
+  and deny commands.
 
 ## Audit log
 
@@ -368,13 +372,17 @@ The `RESULT` column takes these values:
 | `approval_required` | Waiting for a human |
 | `duplicate` | A retry with an `idempotency_key` that was already used |
 | `approved` / `rejected` / `expired` | Outcome of a pending request |
+| `pruned` | Retention archived and removed old records (event `retention`) |
 
 Each record also stores the session ID, the arguments with secrets redacted,
 and their SHA-256, the policy rule that decided, and the duration. If the
 audit log cannot be written, the call is refused rather than run unrecorded.
 
-The `audit_log` table rejects updates and deletes. There is no automatic
-retention yet, so the database grows over time.
+The `audit_log` table rejects updates and deletes. The only deletions are
+made by retention: by default, records older than 90 days are written to
+compressed archives and then removed, and a `retention` record
+(result `pruned`) says what was removed and where it went. See
+[install.md](install.md#audit-retention).
 
 ## Events
 

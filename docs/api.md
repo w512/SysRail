@@ -357,17 +357,18 @@ arguments, the approver's identity and the policy rule.
 |---|---|---|
 | `id` | int | Increasing record ID |
 | `timestamp` | time | When the record was written |
-| `event` | string | `request` (before anything runs), `result` (after a call ran) or `approval` (decision or expiry) |
+| `event` | string | `request` (before anything runs), `result` (after a call ran), `approval` (decision or expiry) or `retention` (old records were archived and removed) |
 | `agent`, `session` | string, optional | Caller |
 | `capability`, `resource` | string, optional | What was called, on what |
 | `arguments` | object, optional | Normalized arguments with secrets redacted (`request` records only) |
 | `arguments_hash` | string, optional | SHA-256 of the unredacted arguments |
 | `policy_decision`, `policy_rule` | string, optional | `allow`, `ask` or `deny`, and the rule that matched |
 | `request_id` | string, optional | Tracked request, if any |
-| `result` | string | `started`, `success`, `error`, `denied`, `invalid`, `approval_required`, `duplicate`, `approved`, `rejected` or `expired` |
+| `result` | string | `started`, `success`, `error`, `denied`, `invalid`, `approval_required`, `duplicate`, `approved`, `rejected`, `expired` or `pruned` |
 | `error_code`, `error_message` | string, optional | For errors and refusals |
 | `duration_ms` | int, optional | Execution time (`result` records) |
-| `actor` | string, optional | Approver identity (`approval` and approved `result` records) |
+| `actor` | string, optional | Approver identity (`approval` and approved `result` records); `system` for expiry and retention |
+| `note` | string, optional | Explanation on system records, e.g. what a `retention` record removed and where it was archived |
 
 ### Event
 
@@ -385,6 +386,38 @@ arguments, the approver's identity and the policy rule.
 |---|---|
 | `request.pending`, `request.approved`, `request.denied`, `request.expired`, `request.executed`, `request.failed` | `request_id`, `capability`, `status` |
 | `service.failed`, `service.recovered` | `active_state`, `sub_state`, and `previous_state` when known |
+
+## Notification webhook payload
+
+Webhooks configured under `notifications.webhooks` receive a `POST` with
+`Content-Type: application/json`. Any status other than 2xx counts as a
+failure. HTTP 429 and 5xx are retried. Redirects are not followed.
+
+```json
+{
+  "type": "request.pending",
+  "title": "SysRail: approval needed on web1",
+  "text": "opencode requests service.restart on nginx.service (risk: low).\nImpact: ...\n\nApprove: sudo sysrail approvals approve req_01M3...\nDeny:    sudo sysrail approvals deny req_01M3...",
+  "priority": "high",
+  "host": "web1",
+  "event": {"id": 12, "time": "2026-10-02T19:00:00Z", "type": "request.pending", "source": "core", "agent": "opencode",
+            "resource_kind": "service", "resource": "nginx.service",
+            "data": {"request_id": "req_01M3...", "capability": "service.restart", "status": "pending"}},
+  "request": {"request_id": "req_01M3...", "agent": "opencode", "capability": "service.restart",
+              "resource": "nginx.service", "risk": "low", "status": "pending", "reason": "port 80 is free again",
+              "impact": "Stops and starts the service again; its clients see a brief interruption.",
+              "expires_at": "2026-10-02T19:15:00Z"}
+}
+```
+
+| Field | Type | Meaning |
+|---|---|---|
+| `type` | string | Event type, or `test` for `sysrail notify test` |
+| `title`, `text` | string | The rendered message, as sent to the other channels |
+| `priority` | string | `high` for pending requests, failures and denials; otherwise `default` |
+| `host` | string | Host name of the server |
+| `event` | [Event](#event) | The event itself |
+| `request` | object, optional | For request events. Has `request_id`, `agent`, `capability`, `resource`, `risk`, `status`, `reason` (from the agent, unverified, cleaned and redacted), `impact` (from SysRail), `expires_at`, `decided_by`, `decision_note`, `error_code` and `error_message` (each optional except the first, `agent`, `capability` and `status`). |
 
 ## Capability results
 

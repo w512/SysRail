@@ -169,11 +169,14 @@ sudo sysrail approvals approve req_… [--note "…"]   # shows the request and 
 sudo sysrail approvals deny req_… [--note "…"]
 ```
 
-Approval works only through the admin socket (`/run/sysrail/admin.sock`,
-mode 0600), so an agent can never approve its own request. The daemon
-executes the stored arguments exactly as requested and re-checks the policy
-first. Pending requests expire after `approvals.ttl` (15 minutes by default).
-Mutating calls accept an `idempotency_key`, which makes retries safe.
+Configure notifications through ntfy, Telegram, email or a webhook to hear
+about new requests (`sudo sysrail notify test` checks them). Each message
+includes the approve and deny commands. Approval itself works only through
+the admin socket (`/run/sysrail/admin.sock`, mode 0600), so an agent can never
+approve its own request. The daemon executes the stored arguments exactly as
+requested and re-checks the policy first. Pending requests expire after
+`approvals.ttl` (15 minutes by default). Mutating calls accept an
+`idempotency_key`, which makes retries safe.
 
 ## Audit and events
 
@@ -184,7 +187,8 @@ sudo sysrail audit --request req_… --json
 ```
 
 Every call is audited before anything runs, reads included. If the audit log
-cannot be written, the request is refused.
+cannot be written, the request is refused. Records are kept for 90 days by
+default, then written to compressed archives and removed from the database.
 
 `GET /v1/events` streams Server-Sent Events: request lifecycle events and
 `service.failed` / `service.recovered`. Agents receive their own requests'
