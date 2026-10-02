@@ -15,6 +15,8 @@ const (
 	EventResult = "result"
 	// EventApproval records a human or automatic decision on a pending request.
 	EventApproval = "approval"
+	// EventRetention records that old records were archived and removed.
+	EventRetention = "retention"
 )
 
 // Result values.
@@ -29,6 +31,7 @@ const (
 	ResultApproved         = "approved"
 	ResultRejected         = "rejected"
 	ResultExpired          = "expired"
+	ResultPruned           = "pruned"
 )
 
 // Record is one audit log entry. Arguments are redacted before persistence.
@@ -50,6 +53,8 @@ type Record struct {
 	ErrorMessage   string          `json:"error_message,omitempty"`
 	DurationMS     int64           `json:"duration_ms,omitempty"`
 	Actor          string          `json:"actor,omitempty"`
+	// Note explains system records, e.g. what retention removed.
+	Note string `json:"note,omitempty"`
 }
 
 // Filter selects audit records. With AfterID set, records are returned in

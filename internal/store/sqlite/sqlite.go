@@ -125,11 +125,11 @@ func (s *Store) Append(ctx context.Context, r *audit.Record) error {
 	}
 	res, err := s.db.ExecContext(ctx, `INSERT INTO audit_log
 		(ts, event, agent, session, capability, resource, arguments_hash, arguments,
-		 policy_decision, policy_rule, request_id, result, error_code, error_message, duration_ms, actor)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 policy_decision, policy_rule, request_id, result, error_code, error_message, duration_ms, actor, note)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		formatTime(r.Time), r.Event, r.Agent, r.Session, r.Capability, r.Resource, r.ArgumentsHash,
 		string(r.Arguments), r.PolicyDecision, r.PolicyRule, r.RequestID, r.Result, r.ErrorCode,
-		r.ErrorMessage, r.DurationMS, r.Actor)
+		r.ErrorMessage, r.DurationMS, r.Actor, r.Note)
 	if err != nil {
 		return fmt.Errorf("append audit record: %w", err)
 	}
@@ -156,9 +156,7 @@ func (s *Store) List(ctx context.Context, f audit.Filter) ([]audit.Record, error
 		where, args = append(where, "id > ?"), append(args, f.AfterID)
 		order = "ASC"
 	}
-	q := `SELECT id, ts, event, agent, session, capability, resource, arguments_hash, arguments,
-		policy_decision, policy_rule, request_id, result, error_code, error_message, duration_ms, actor
-		FROM audit_log`
+	q := `SELECT ` + auditColumns + ` FROM audit_log`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -169,22 +167,8 @@ func (s *Store) List(ctx context.Context, f audit.Filter) ([]audit.Record, error
 		return nil, fmt.Errorf("list audit records: %w", err)
 	}
 	defer rows.Close()
-	var out []audit.Record
-	for rows.Next() {
-		var r audit.Record
-		var ts, arguments string
-		if err := rows.Scan(&r.ID, &ts, &r.Event, &r.Agent, &r.Session, &r.Capability, &r.Resource,
-			&r.ArgumentsHash, &arguments, &r.PolicyDecision, &r.PolicyRule, &r.RequestID, &r.Result,
-			&r.ErrorCode, &r.ErrorMessage, &r.DurationMS, &r.Actor); err != nil {
-			return nil, err
-		}
-		r.Time = parseTime(ts)
-		if arguments != "" {
-			r.Arguments = json.RawMessage(arguments)
-		}
-		out = append(out, r)
-	}
-	if err := rows.Err(); err != nil {
+	out, err := scanAuditRows(rows)
+	if err != nil {
 		return nil, err
 	}
 	if order == "DESC" {
@@ -193,6 +177,28 @@ func (s *Store) List(ctx context.Context, f audit.Filter) ([]audit.Record, error
 		}
 	}
 	return out, nil
+}
+
+const auditColumns = `id, ts, event, agent, session, capability, resource, arguments_hash, arguments,
+	policy_decision, policy_rule, request_id, result, error_code, error_message, duration_ms, actor, note`
+
+func scanAuditRows(rows *sql.Rows) ([]audit.Record, error) {
+	var out []audit.Record
+	for rows.Next() {
+		var r audit.Record
+		var ts, arguments string
+		if err := rows.Scan(&r.ID, &ts, &r.Event, &r.Agent, &r.Session, &r.Capability, &r.Resource,
+			&r.ArgumentsHash, &arguments, &r.PolicyDecision, &r.PolicyRule, &r.RequestID, &r.Result,
+			&r.ErrorCode, &r.ErrorMessage, &r.DurationMS, &r.Actor, &r.Note); err != nil {
+			return nil, err
+		}
+		r.Time = parseTime(ts)
+		if arguments != "" {
+			r.Arguments = json.RawMessage(arguments)
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 // CreateRequest implements request.Store.
